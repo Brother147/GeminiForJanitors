@@ -117,7 +117,7 @@ uv run --python 3.13 --no-dev flask --app "gfjproxy.app:create_app()" run -h 127
 
 You must first create a Railway account. On the free tier, its resource limits get reduced after one month, but it should always be capable of hosting one proxy instance. Once you are logged in, go to https://railway.com/deploy/iV1PVj and then press **Deploy Now**.
 
-<img src="images/railway-1.jpg" />
+<img src="images/railway-1.jpg" width="45%" />
 
 If you see this next screen, press **Deploy**.
 
@@ -129,23 +129,23 @@ If you see this next screen, press **Deploy**.
 
 With this, your proxy should be up and running shortly. Once it is done deploying, tap on the cube icon that says **vu5eruz/geminiforjanitors:master** to open your service settings.
 
-<img src="images/railway-3.jpg" />
+<img src="images/railway-3.jpg" width="45%" />
 
 In your service settings, you can copy and paste your proxy's URL. It is ready to use, however, the proxy will say it is hosted by Anonymous; if you want to change that, go to **Variables**.
 
-<img src="images/railway-4.jpg" />
+<img src="images/railway-4.jpg" width="45%" />
 
 Here, you can configure a few proxy settings. The two variables that come by default (`GFJPROXY_REDIS_URL` and `GFJPROXY_XUID_SECRET`) should NOT be changed, as doing so can break the proxy. To make the proxy identify as yours, first press **New Variable**.
 
-<img src="images/railway-5.jpg" />
+<img src="images/railway-5.jpg" width="45%" />
 
 Put `GFJPROXY_ADMIN` as the variable name. Then put your contacts into the value, such as Discord or JanitorAI handles or just your name, and press **Add**.
 
-<img src="images/railway-6.jpg" />
+<img src="images/railway-6.jpg" width="45%" />
 
 After you are done, press **Deploy** to commit the changes, then wait for your proxy to update.
 
-<img src="images/railway-7.jpg" />
+<img src="images/railway-7.jpg" width="45%" />
 
 ## Deploying on Render
 
