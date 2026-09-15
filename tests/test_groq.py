@@ -1,5 +1,5 @@
-from gfjproxy.providers.groq import groq_generate_content
 from gfjproxy.models import JaiMessage
+from gfjproxy.providers.groq import groq_generate_content
 
 
 def test_groq_provider_accepts_model_from_janitor(mocker):
