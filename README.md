@@ -196,3 +196,13 @@ To set up such a policy, set GFJPROXY_COOLDOWN to:
 ```
 
 Then deploy your instance. You can read the logs for `Using cooldown policy` to see if your changes have been applied.
+
+
+## Groq
+
+Use the normal provider/model syntax:
+
+- API key: `groq/gsk_...` (or a plain `gsk_...` key)
+- Model: `groq/openai/gpt-oss-120b`
+
+The model is **not hard-coded** in the proxy. JanitorAI's `model` value is passed through to Groq, so any compatible Groq model can be selected with `groq/<model-id>`.

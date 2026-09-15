@@ -11,6 +11,7 @@ from .providers.cerebras import cerebras_generate_content
 from .providers.deepseek import deepseek_generate_content
 from .providers.gemini import gemini_generate_content
 from .providers.gemini_cli import gemini_cli_generate_content
+from .providers.groq import groq_generate_content
 from .providers.nvidia import nvidia_generate_content
 from .providers.openrouter import openrouter_generate_content
 from .providers.proxy import proxy_generate_content
@@ -30,6 +31,7 @@ API_KEY_PREFIXES = {
     "sk-or-v1-": "openrouter",
     "sk-proj-": "openai",
     "gfjproxy.gemini_cli.": "gemini_cli",
+    "gsk_": "groq",
 }
 
 PROVIDER_FUNCS = {
@@ -37,6 +39,7 @@ PROVIDER_FUNCS = {
     "deepseek": deepseek_generate_content,
     "gemini_cli": gemini_cli_generate_content,
     "google": gemini_generate_content,
+    "groq": groq_generate_content,
     "nvidia": nvidia_generate_content,
     "openrouter": openrouter_generate_content,
     "proxy": proxy_generate_content,
@@ -82,6 +85,7 @@ def _handle_request(
                 "- If the key is for Cerebras, add `cerebras/` at the start of it.\n"
                 "- If the key is for DeepSeek, add `deepseek/` at the start of it.\n"
                 "- If the key is for Google AI or Vertex AI, add `google/` at the start of it.\n"
+                "- If the key is for Groq, add `groq/` at the start of it.\n"
                 "- If the key is for Nvidia NIM, add `nvidia/` at the start of it.\n"
                 "- If the key is for Z.AI, add `z_ai/` at the start of it.\n"
                 "- If the key is for OpenRouter, add `openrouter/` at the start of it.\n"
