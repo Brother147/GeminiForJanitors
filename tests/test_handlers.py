@@ -12,7 +12,7 @@ from gfjproxy.handlers import (
     handle_chat_message,
     handle_proxy_test,
 )
-from gfjproxy.models import JaiMessage, JaiRequest
+from gfjproxy.models import JaiMessage, JaiRequest, JaiResult
 from gfjproxy.utils import ResponseHelper
 from gfjproxy.xuiduser import XUID, LocalUserStorage, UserSettings
 
