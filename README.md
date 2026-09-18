@@ -206,3 +206,12 @@ Use the normal provider/model syntax:
 - Model: `groq/openai/gpt-oss-120b`
 
 The model is **not hard-coded** in the proxy. JanitorAI's `model` value is passed through to Groq, so any compatible Groq model can be selected with `groq/<model-id>`.
+
+## AMD Radeon Cloud
+
+Use the normal provider/model syntax:
+
+- API key: `radeon/rc-...` (or a plain `rc-...` key)
+- Model: `radeon/DeepSeek-V4-Flash`
+
+The model is **not hard-coded** in the proxy. JanitorAI's `model` value is passed through to AMD Radeon Cloud unchanged, so use the current model ID from AMD's `/v1/models` catalog.

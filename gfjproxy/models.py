@@ -102,20 +102,27 @@ class JaiRequest:
             jai_req.messages = [JaiMessage.parse(jai_msg) for jai_msg in messages]
 
         if models := data.get("model"):
-            for model in comma_split(models.lower()):
+            for model in comma_split(models):
+                normalized_model = model.lower()
                 if "/" in model:
                     provider, model_name = model.split("/", maxsplit=1)
+                    provider = provider.lower()
+                    # Radeon model IDs are case-sensitive; preserve the exact
+                    # spelling JanitorAI supplied. Keep existing normalization
+                    # for every other provider.
+                    if provider != "radeon":
+                        model_name = model_name.lower()
                     jai_req.models[provider] = model_name
-                elif model.startswith(("gemini-", "gemma-")):
-                    jai_req.models["google"] = model
-                elif model.startswith("deepseek-"):
-                    jai_req.models["deepseek"] = model
+                elif normalized_model.startswith(("gemini-", "gemma-")):
+                    jai_req.models["google"] = normalized_model
+                elif normalized_model.startswith("deepseek-"):
+                    jai_req.models["deepseek"] = normalized_model
                 else:
                     # Build a comma-separated list of unknown models
                     if unknown := jai_req.models.get("unknown"):
-                        jai_req.models["unknown"] = f"{unknown}, {model}"
+                        jai_req.models["unknown"] = f"{unknown}, {normalized_model}"
                     else:
-                        jai_req.models["unknown"] = model
+                        jai_req.models["unknown"] = normalized_model
 
         if stream := data.get("stream"):
             jai_req.stream = stream

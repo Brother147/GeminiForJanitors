@@ -13,6 +13,7 @@ from .providers.gemini import gemini_generate_content
 from .providers.gemini_cli import gemini_cli_generate_content
 from .providers.groq import groq_generate_content
 from .providers.nvidia import nvidia_generate_content
+from .providers.radeon import radeon_generate_content
 from .providers.openrouter import openrouter_generate_content
 from .providers.proxy import proxy_generate_content
 from .providers.z_ai import z_ai_generate_content
@@ -32,6 +33,7 @@ API_KEY_PREFIXES = {
     "sk-proj-": "openai",
     "gfjproxy.gemini_cli.": "gemini_cli",
     "gsk_": "groq",
+    "rc-": "radeon",
 }
 
 PROVIDER_FUNCS = {
@@ -43,6 +45,7 @@ PROVIDER_FUNCS = {
     "nvidia": nvidia_generate_content,
     "openrouter": openrouter_generate_content,
     "proxy": proxy_generate_content,
+    "radeon": radeon_generate_content,
     "z_ai": z_ai_generate_content,
 }
 
@@ -86,6 +89,7 @@ def _handle_request(
                 "- If the key is for DeepSeek, add `deepseek/` at the start of it.\n"
                 "- If the key is for Google AI or Vertex AI, add `google/` at the start of it.\n"
                 "- If the key is for Groq, add `groq/` at the start of it.\n"
+                "- If the key is for AMD Radeon Cloud, add `radeon/` at the start of it.\n"
                 "- If the key is for Nvidia NIM, add `nvidia/` at the start of it.\n"
                 "- If the key is for Z.AI, add `z_ai/` at the start of it.\n"
                 "- If the key is for OpenRouter, add `openrouter/` at the start of it.\n"

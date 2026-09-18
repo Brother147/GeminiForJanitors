@@ -45,3 +45,25 @@ def test_jai_request(sample):
 
 
 ################################################################################
+
+
+def test_jai_request_preserves_radeon_model_case():
+    jai_req = JaiRequest.parse(
+        {
+            "model": "RaDeOn/DeepSeek-V4-Flash",
+            "messages": [{"content": "hello", "role": "user"}],
+        }
+    )
+
+    assert jai_req.models == {"radeon": "DeepSeek-V4-Flash"}
+
+
+def test_jai_request_keeps_existing_lowercase_model_behavior():
+    jai_req = JaiRequest.parse(
+        {
+            "model": "OPENROUTER/DeepSeek/Test-Model",
+            "messages": [{"content": "hello", "role": "user"}],
+        }
+    )
+
+    assert jai_req.models == {"openrouter": "deepseek/test-model"}

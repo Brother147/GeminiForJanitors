@@ -536,11 +536,11 @@ Makes the selection of words the AI can pick from based on how likely they are.
 
 ## **Repetition Penalty**
 `//advset_repetition_penalty on|off|this`
-Not supported by `z_ai` and some `google` models.
+Not supported by `z_ai`, AMD Radeon Cloud, and some `google` models.
 
 Encourages the AI to use new words.
 
-The proxy always implements this setting as "Presence Penalty" for compatibility.
+The proxy implements this as "Presence Penalty" for providers that expose that compatible parameter. Providers without support ignore it.
 
 ## **Frequency Penalty**
 `//advset_frequency_penalty on|off|this`
@@ -645,6 +645,15 @@ All API keys that start with `csk-` will be used with Cerebras models.
 To use any DeepSeek model, you must add `deepseek/` at the start.
 
 You must add `deepseek/` at the start of any DeepSeek API key.
+
+## **AMD Radeon Cloud** (`radeon`)
+
+`https://developer.amd.com.cn/radeon/`
+
+To use any AMD Radeon Cloud model, add `radeon/` at the start of the model name.
+The model ID is passed through unchanged, for example `radeon/DeepSeek-V4-Flash`.
+
+API keys can be supplied as `radeon/<key>`. AMD Radeon Cloud keys currently use the `rc-` prefix and are also auto-detected.
 
 ## **Nvidia NIM** (`nvidia`)
 

@@ -6,7 +6,12 @@ from httpx2 import ReadTimeout
 from pytest_mock import MockerFixture
 
 from gfjproxy._globals import BANNER, BANNER_VERSION
-from gfjproxy.handlers import handle_chat_message, handle_proxy_test
+from gfjproxy.handlers import (
+    _handle_request,
+    _resolve_provider,
+    handle_chat_message,
+    handle_proxy_test,
+)
 from gfjproxy.models import JaiMessage, JaiRequest
 from gfjproxy.utils import ResponseHelper
 from gfjproxy.xuiduser import XUID, LocalUserStorage, UserSettings
@@ -502,3 +507,33 @@ def test_chat_message(mocker: MockerFixture, params: dict[str, Any]):
 
 
 ################################################################################
+
+
+def test_resolve_radeon_provider_prefix():
+    assert _resolve_provider("radeon/rc-secret-key") == ("radeon", "rc-secret-key")
+    assert _resolve_provider("RaDeOn/rc-secret-key") == ("radeon", "rc-secret-key")
+    assert _resolve_provider("rc-secret-key") == ("radeon", "rc-secret-key")
+
+
+def test_handle_request_dispatches_radeon(mocker):
+    result = JaiResult(200, "ok")
+    radeon = mocker.Mock(return_value=result)
+    mocker.patch.dict(
+        "gfjproxy.handlers.PROVIDER_FUNCS", {"radeon": radeon}, clear=False
+    )
+
+    response = _handle_request(
+        XUID("test", "user"),
+        "radeon/rc-secret-key",
+        {"radeon": "DeepSeek-V4-Flash"},
+        [JaiMessage(role="user", content="hello")],
+    )
+
+    assert response is result
+    radeon.assert_called_once_with(
+        XUID("test", "user"),
+        "rc-secret-key",
+        "DeepSeek-V4-Flash",
+        [JaiMessage(role="user", content="hello")],
+        None,
+    )
