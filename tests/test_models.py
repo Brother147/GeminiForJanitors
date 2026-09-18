@@ -67,3 +67,8 @@ def test_jai_request_keeps_existing_lowercase_model_behavior():
     )
 
     assert jai_req.models == {"openrouter": "deepseek/test-model"}
+def test_parse_radeon_model_preserves_exact_case():
+    jai_req = JaiRequest.parse({"model": "radeon/DeepSeek-V4-Flash"})
+    assert jai_req.models == {"radeon": "DeepSeek-V4-Flash"}
+
+

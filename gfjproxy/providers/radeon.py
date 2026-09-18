@@ -72,9 +72,12 @@ def radeon_generate_content(
     messages: list[JaiMessage],
     settings: dict[str, Any] | None = None,
 ) -> JaiResult:
-    """Wrapper around AMD Radeon Cloud's OpenAI-compatible Chat Completions API."""
+    """Wrapper around AMD Radeon Cloud's OpenAI-compatible Chat Completions API.
 
-    api_key = api_key.removeprefix("radeon/").strip()
+    The model is supplied by JanitorAI using the normal provider/model syntax,
+    e.g. ``radeon/DeepSeek-V4-Flash``. The request reaches AMD with the model
+    name after the provider prefix, matching the Groq provider's architecture.
+    """
 
     radeon_request = {
         "model": model,
@@ -91,17 +94,21 @@ def radeon_generate_content(
     for key, value in (settings or {}).items():
         if key == "temperature":
             radeon_request["temperature"] = value
+        elif key == "max_tokens":
+            radeon_request["max_tokens"] = value
         elif key == "top_p":
             radeon_request["top_p"] = value
         elif key == "frequency_penalty":
-            radeon_request["frequency_penalty"] = value
+            # Radeon Cloud's shared endpoint does not document this field.
+            # Do not send unsupported settings.
+            continue
         elif key == "repetition_penalty":
             # AMD Radeon Cloud does not document repetition_penalty.
             # Do not translate it to presence_penalty: they are not equivalent.
             continue
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {api_key.removeprefix('radeon/').strip()}",
         "Content-Type": "application/json",
     }
 

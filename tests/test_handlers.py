@@ -515,6 +515,30 @@ def test_resolve_radeon_provider_prefix():
     assert _resolve_provider("rc-secret-key") == ("radeon", "rc-secret-key")
 
 
+def test_handle_request_auto_detects_radeon_key_and_model(mocker):
+    result = JaiResult(200, "ok")
+    radeon = mocker.Mock(return_value=result)
+    mocker.patch.dict(
+        "gfjproxy.handlers.PROVIDER_FUNCS", {"radeon": radeon}, clear=False
+    )
+
+    response = _handle_request(
+        XUID("test", "user"),
+        "rc-secret-key",
+        {"radeon": "DeepSeek-V4-Flash"},
+        [JaiMessage(role="user", content="hello")],
+    )
+
+    assert response is result
+    radeon.assert_called_once_with(
+        XUID("test", "user"),
+        "rc-secret-key",
+        "DeepSeek-V4-Flash",
+        [JaiMessage(role="user", content="hello")],
+        None,
+    )
+
+
 def test_handle_request_dispatches_radeon(mocker):
     result = JaiResult(200, "ok")
     radeon = mocker.Mock(return_value=result)
