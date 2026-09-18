@@ -14,8 +14,8 @@ from .providers.gemini_cli import gemini_cli_generate_content
 from .providers.groq import groq_generate_content
 from .providers.nvidia import nvidia_generate_content
 from .providers.openrouter import openrouter_generate_content
-from .providers.radeon import radeon_generate_content
 from .providers.proxy import proxy_generate_content
+from .providers.radeon import radeon_generate_content
 from .providers.z_ai import z_ai_generate_content
 from .statistics import track_stats
 from .utils import ResponseHelper
