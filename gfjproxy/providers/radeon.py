@@ -18,6 +18,11 @@ def _redact_api_key(value: str, api_key: str) -> str:
     return value.replace(api_key, "[REDACTED]") if api_key else value
 
 
+def _log(user: XUID | str | None, message: str) -> None:
+    """Log with a valid XUID while keeping provider tests/callers robust."""
+    xlog(user if isinstance(user, XUID) else None, message)
+
+
 def _extract_error(
     user: XUID, response: httpx2.Response, api_key: str
 ) -> tuple[str, str]:
@@ -55,7 +60,7 @@ def _extract_error(
                 )
 
     if message == "Error from AMD Radeon Cloud":
-        xlog(user, f"{message}: {_redact_api_key(response.text, api_key)!r}")
+        _log(user, f"{message}: {_redact_api_key(response.text, api_key)!r}")
 
     return message, extras
 
@@ -111,7 +116,7 @@ def radeon_generate_content(
         try:
             radeon_result = radeon_response.json()
         except (ValueError, TypeError):
-            xlog(
+            _log(
                 user,
                 f"Invalid AMD response JSON: "
                 f"{_redact_api_key(radeon_response.text, api_key)!r}",
@@ -133,12 +138,12 @@ def radeon_generate_content(
 
         return JaiResult(e.response.status_code, message, extras=extras)
     except Exception as e:  # ruff: ignore[BLE001]
-        xlog(user, _redact_api_key(repr(e), api_key))
+        _log(user, _redact_api_key(repr(e), api_key))
         track_stats("radeon.failed.exception")
         return JaiResult(502, "Unhandled exception from AMD Radeon Cloud.")
 
     if not isinstance(radeon_result, dict):
-        xlog(
+        _log(
             user,
             "Unexpected AMD response: "
             f"{_redact_api_key(repr(radeon_result), api_key)}",
@@ -164,7 +169,7 @@ def radeon_generate_content(
 
     choices = radeon_result.get("choices")
     if not isinstance(choices, list):
-        xlog(
+        _log(
             user,
             "Unexpected AMD response choices: "
             f"{_redact_api_key(repr(choices), api_key)}",
@@ -188,7 +193,7 @@ def radeon_generate_content(
                 text = str(message.get("content") or "")
 
     if not text:
-        xlog(
+        _log(
             user,
             f"No result text: {_redact_api_key(repr(radeon_result), api_key)}",
         )
