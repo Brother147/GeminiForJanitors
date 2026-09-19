@@ -99,9 +99,8 @@ def radeon_generate_content(
         elif key == "top_p":
             radeon_request["top_p"] = value
         elif key == "frequency_penalty":
-            # Radeon Cloud's shared endpoint does not document this field.
-            # Do not send unsupported settings.
-            continue
+            # Radeon Cloud documents frequency_penalty on /v1/chat/completions.
+            radeon_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
             # AMD Radeon Cloud does not document repetition_penalty.
             # Do not translate it to presence_penalty: they are not equivalent.

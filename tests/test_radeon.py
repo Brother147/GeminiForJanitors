@@ -62,6 +62,7 @@ def test_radeon_provider_sends_openai_compatible_request(mocker):
         "temperature": 0.7,
         "max_tokens": 256,
         "top_p": 0.9,
+        "frequency_penalty": 0.2,
     }
 
 
