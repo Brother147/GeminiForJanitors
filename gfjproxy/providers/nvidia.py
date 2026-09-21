@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any import json
 
 import httpx2
 
@@ -71,14 +71,44 @@ def nvidia_generate_content(
     }
 
     try:
-        nvidia_response = http_client.post(
-            "https://integrate.api.nvidia.com/v1/chat/completions",
-            json=nvidia_request,
-            headers=headers,
-            timeout=PROCESS_TIMEOUT,
-        )
-        nvidia_response.raise_for_status()
-        nvidia_result = nvidia_response.json()
+        chunks = []
+
+with http_client.stream(
+    "POST",
+    "https://integrate.api.nvidia.com/v1/chat/completions",
+    json=nvidia_request,
+    headers=headers,
+    timeout=PROCESS_TIMEOUT,
+) as nvidia_response:
+    nvidia_response.raise_for_status()
+
+    for line in nvidia_response.iter_lines():
+        if not line or not line.startswith("data: "):
+            continue
+
+        data = line[6:]
+
+        if data == "[DONE]":
+            continue
+
+        try:
+            chunk = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+
+        for choice in chunk.get("choices", []):
+            content = choice.get("delta", {}).get("content")
+
+            if content:
+                chunks.append(content)
+
+nvidia_result = {
+    "choices": [{
+        "message": {
+            "content": "".join(chunks)
+        }
+    }]
+}
     except httpx2.TimeoutException:
         track_stats("nvidia.time_out")
         return JaiResult(504, "Gateway Timeout")
