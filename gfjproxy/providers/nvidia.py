@@ -41,7 +41,7 @@ def nvidia_generate_content(
 
     nvidia_request = {
         "model": model,
-        "stream": False,
+        "stream": True,
         "messages": [
             {
                 "content": message.content,
