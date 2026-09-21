@@ -1,6 +1,6 @@
+import json
 from typing import Any
 
-import json
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
