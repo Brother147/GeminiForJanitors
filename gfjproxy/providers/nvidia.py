@@ -1,5 +1,6 @@
-from typing import Any import json
+from typing import Any
 
+import json
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
@@ -13,7 +14,6 @@ from ..xuiduser import XUID
 def _simplify_error_message(message: str) -> str:
     if not message:
         return "[empty error message]"
-
     # Nvidia sometimes seems to send duplicated error messages in the same string
     # I.e. the first half of the string is equal to the second half, separated by a space
     half_len = len(message) // 2
@@ -33,7 +33,8 @@ def nvidia_generate_content(
 ) -> JaiResult:
     """Wrapper around Nvidia NIM API.
 
-    User paramater is only used for logging."""
+    User paramater is only used for logging.
+    """
 
     if len(messages) == 1 and messages[0].role == "assistant":
         # For some models, "conversation roles must alternate user/assistant/user/assistant/"
@@ -67,55 +68,62 @@ def nvidia_generate_content(
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Accept": "application/json",
+        "Accept": "text/event-stream",
     }
 
     try:
-        chunks = []
+        chunks: list[str] = []
 
-with http_client.stream(
-    "POST",
-    "https://integrate.api.nvidia.com/v1/chat/completions",
-    json=nvidia_request,
-    headers=headers,
-    timeout=PROCESS_TIMEOUT,
-) as nvidia_response:
-    nvidia_response.raise_for_status()
+        with http_client.stream(
+            "POST",
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            json=nvidia_request,
+            headers=headers,
+            timeout=PROCESS_TIMEOUT,
+        ) as nvidia_response:
+            nvidia_response.raise_for_status()
 
-    for line in nvidia_response.iter_lines():
-        if not line or not line.startswith("data: "):
-            continue
+            for line in nvidia_response.iter_lines():
+                if not line:
+                    continue
 
-        data = line[6:]
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
 
-        if data == "[DONE]":
-            continue
+                if not line.startswith("data: "):
+                    continue
 
-        try:
-            chunk = json.loads(data)
-        except json.JSONDecodeError:
-            continue
+                data = line[6:]
 
-        for choice in chunk.get("choices", []):
-            content = choice.get("delta", {}).get("content")
+                if data == "[DONE]":
+                    continue
 
-            if content:
-                chunks.append(content)
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
 
-nvidia_result = {
-    "choices": [{
-        "message": {
-            "content": "".join(chunks)
+                for choice in chunk.get("choices", []):
+                    content = choice.get("delta", {}).get("content")
+                    if content:
+                        chunks.append(content)
+
+        nvidia_result = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "".join(chunks),
+                    }
+                }
+            ]
         }
-    }]
-}
+
     except httpx2.TimeoutException:
         track_stats("nvidia.time_out")
         return JaiResult(504, "Gateway Timeout")
     except httpx2.HTTPStatusError as e:
         message = "Error from Nvidia NIM"
         extras = ""
-
         content_type: str | None
         if content_type := e.response.headers.get("content-type"):
             if content_type.startswith("text/plain"):
@@ -128,14 +136,12 @@ nvidia_result = {
                         message += f": {_simplify_error_message(error_message)}"
             elif content_type.startswith("application/problem+json"):
                 response_json = e.response.json()
-
                 if title := response_json.get("title"):
                     message += f" ({title})"
                 if detail := response_json.get("detail"):
                     message += f": {detail}"
             else:
                 xlog(user, f"{message}: {e.response.text!r}")
-
         if e.response.is_client_error:
             track_stats("nvidia.failed.client")
         elif e.response.is_server_error:
