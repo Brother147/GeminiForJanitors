@@ -1,7 +1,6 @@
 """Helpers for streaming OpenAI-compatible and Gemini SSE responses."""
 
 import json
-import sys
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, suppress
 from typing import Any
@@ -12,43 +11,71 @@ from .http_client import http_client
 
 
 class StreamingHTTPError(RuntimeError):
-    """Raised when an upstream streaming connection fails after opening."""
+    """Raised when an upstream streaming connection fails."""
+
+    def __init__(self, status_code: int | None = None):
+        self.status_code = status_code
+        if status_code is None:
+            message = "Upstream provider stream failed"
+        else:
+            message = f"Upstream provider returned HTTP {status_code}"
+        super().__init__(message)
 
 
 class _ManagedStream(Iterator[str]):
-    """Iterator that owns an already-open HTTP streaming context.
+    """Lazy HTTP stream with explicit ownership and cleanup.
 
-    A plain generator is not enough here: calling ``close()`` on a generator
-    that has never been started does not execute its ``finally`` block. The
-    downstream Flask generator can be closed immediately after its first SSE
-    heartbeat, so the HTTP context needs an explicit close method that works
-    even when ``__next__`` has never run.
+    The upstream request is intentionally opened on the first ``next()`` rather
+    than while building the Flask response.  This allows the downstream SSE
+    response to start immediately even when a model needs a long time before
+    sending its first token.
     """
 
     def __init__(
         self,
-        context: AbstractContextManager,
-        iterator_factory: Callable[[], Iterator[str]],
+        open_factory: Callable[[], tuple[AbstractContextManager, Any]],
+        iterator_factory: Callable[[Any], Iterator[str]],
     ):
-        self._context = context
-        self._iterator = iterator_factory()
+        self._open_factory = open_factory
+        self._iterator_factory = iterator_factory
+        self._context: AbstractContextManager | None = None
+        self._iterator: Iterator[str] | None = None
         self._closed = False
 
     def __iter__(self) -> "_ManagedStream":
         return self
+
+    def _ensure_started(self) -> None:
+        if self._iterator is not None or self._closed:
+            return
+
+        context, response = self._open_factory()
+        self._context = context
+        try:
+            response.raise_for_status()
+        except httpx2.HTTPStatusError as exc:
+            with suppress(Exception):
+                response.read()
+            self.close()
+            raise StreamingHTTPError(exc.response.status_code) from exc
+
+        self._iterator = self._iterator_factory(response)
 
     def __next__(self) -> str:
         if self._closed:
             raise StopIteration
 
         try:
+            self._ensure_started()
+            if self._iterator is None:
+                raise StopIteration
             return next(self._iterator)
         except StopIteration:
             self.close()
             raise
         except httpx2.HTTPError as exc:
             self.close()
-            raise StreamingHTTPError("Upstream provider stream failed") from exc
+            raise StreamingHTTPError() from exc
         except BaseException:
             self.close()
             raise
@@ -58,12 +85,15 @@ class _ManagedStream(Iterator[str]):
             return
         self._closed = True
 
-        close = getattr(self._iterator, "close", None)
-        if callable(close):
-            with suppress(Exception):  # pragma: no cover - cleanup only
-                close()
+        if self._iterator is not None:
+            close = getattr(self._iterator, "close", None)
+            if callable(close):
+                with suppress(Exception):
+                    close()
 
-        _close_stream(self._context)
+        if self._context is not None:
+            _close_stream(self._context)
+            self._context = None
 
 
 def _decode_line(line: str | bytes) -> str:
@@ -72,48 +102,46 @@ def _decode_line(line: str | bytes) -> str:
     return line
 
 
-def _open_stream(
+def _open_context(
     url: str,
     *,
     request: dict[str, Any],
     headers: dict[str, str],
     timeout: float,
 ) -> tuple[AbstractContextManager, Any]:
-    """Open an upstream HTTP stream and validate its status before returning."""
-
     stream_headers = dict(headers)
     stream_headers.setdefault("Accept", "text/event-stream")
-
     context = http_client.stream(
         "POST", url, json=request, headers=stream_headers, timeout=timeout
     )
-
     try:
-        response = context.__enter__()
-        try:
-            response.raise_for_status()
-        except httpx2.HTTPStatusError:
-            # Responses returned by ``Client.stream`` are intentionally left
-            # unread until the caller iterates them.  When the HTTP status is
-            # already an error, however, provider error handlers need access
-            # to ``response.json()``/``response.text`` after this function
-            # raises. Read the body while the streaming context is still open
-            # so the original HTTP status can be preserved all the way up.
-            with suppress(Exception):  # pragma: no cover - defensive read
-                response.read()
-            raise
+        return context, context.__enter__()
     except BaseException:
-        with suppress(Exception):  # pragma: no cover - defensive cleanup only
-            context.__exit__(*sys.exc_info())
+        with suppress(Exception):
+            context.__exit__(None, None, None)
         raise
-
-    return context, response
 
 
 def _close_stream(context: AbstractContextManager) -> None:
-    # Cleanup must never mask the original streaming/disconnect result.
     with suppress(Exception):
         context.__exit__(None, None, None)
+
+
+def _extract_openai_content(choice: dict[str, Any]) -> str | None:
+    delta = choice.get("delta")
+    if isinstance(delta, dict):
+        content = delta.get("content")
+        if isinstance(content, str):
+            return content
+
+    message = choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+
+    text = choice.get("text")
+    return text if isinstance(text, str) else None
 
 
 def _iter_openai_text(response: Any) -> Iterator[str]:
@@ -135,18 +163,20 @@ def _iter_openai_text(response: Any) -> Iterator[str]:
             continue
 
         content_found = False
-        for choice in chunk.get("choices", []):
+        choices = chunk.get("choices")
+        if not isinstance(choices, list):
+            continue
+
+        for choice in choices:
             if not isinstance(choice, dict):
                 continue
-            delta = choice.get("delta")
-            if not isinstance(delta, dict):
-                continue
-            content = delta.get("content")
-            if isinstance(content, str) and content:
+            content = _extract_openai_content(choice)
+            if content:
                 content_found = True
                 yield content
 
         if not content_found:
+            # Reasoning-only/non-text events are still useful as a heartbeat.
             yield ""
 
 
@@ -187,6 +217,22 @@ def _iter_gemini_text(response: Any) -> Iterator[str]:
             yield ""
 
 
+def _managed_stream(
+    url: str,
+    *,
+    request: dict[str, Any],
+    headers: dict[str, str],
+    timeout: float,
+    parser: Callable[[Any], Iterator[str]],
+) -> _ManagedStream:
+    return _ManagedStream(
+        lambda: _open_context(
+            url, request=request, headers=headers, timeout=timeout
+        ),
+        parser,
+    )
+
+
 def openai_chat_completion(
     url: str,
     *,
@@ -201,14 +247,13 @@ def openai_chat_completion(
         response.raise_for_status()
         return response.json()
 
-    context, response = _open_stream(
+    return _managed_stream(
         url,
         request=request,
         headers=headers,
         timeout=timeout,
+        parser=_iter_openai_text,
     )
-
-    return _ManagedStream(context, lambda: _iter_openai_text(response))
 
 
 def gemini_sse_completion(
@@ -220,11 +265,10 @@ def gemini_sse_completion(
 ) -> Iterator[str]:
     """Stream text deltas from a Gemini-compatible SSE endpoint."""
 
-    context, response = _open_stream(
+    return _managed_stream(
         url,
         request=request,
         headers=headers,
         timeout=timeout,
+        parser=_iter_gemini_text,
     )
-
-    return _ManagedStream(context, lambda: _iter_gemini_text(response))

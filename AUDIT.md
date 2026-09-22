@@ -14,12 +14,12 @@ The critical application bug was a streaming generator that yielded a `[DONE]` f
 
 ## Global fixes
 
-- OpenAI-compatible streaming now opens and validates the upstream HTTP response before the Flask response is returned.
+- OpenAI-compatible streaming is now lazy: the Flask/SSE response is returned before the upstream model connection is opened. This prevents long first-token latency from blocking the downstream client.
 - Gemini SSE uses the same managed streaming lifecycle.
 - Upstream streaming contexts are explicitly closed even when the downstream iterator is closed before its first `next()` call.
 - No streaming `finally` block yields data.
 - Provider errors that happen after streaming starts are converted to a safe SSE error message instead of an unhandled generator exception.
-- A real OpenAI-compatible empty assistant delta is emitted immediately so downstream clients see the stream start without waiting for the first model token.
+- The stream sends an SSE heartbeat before opening the upstream model connection, so downstream clients receive bytes immediately even when first-token latency is long.
 - Empty upstream events become SSE heartbeats.
 - Streaming responses disable proxy buffering with `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`.
 - User locks are held until the streaming response actually closes instead of being released when the route merely constructs the response.
@@ -61,13 +61,18 @@ The `proxy` provider is non-streaming and was hardened separately.
 The full development test suite and Ruff were not executable in the offline analysis environment because the required third-party packages were unavailable and the package index could not be resolved. This is an environment limitation, not a reported project-test failure.
 ## Streaming HTTP error-body fix
 
-When an upstream OpenAI-compatible streaming request returns a non-2xx status,
-`httpx2.Client.stream()` exposes a response whose body has not yet been read.
-Provider error handlers may call `response.json()` or `response.text()` after
-`raise_for_status()`, which raises `ResponseNotRead` unless the body is consumed
-while the stream context is still open. `_open_stream()` now reads the error body
-before re-raising `HTTPStatusError`, preserving the original upstream status and
-allowing all OpenAI-compatible providers to report their real 4xx/5xx errors.
-A regression test covers the read-before-reraise contract, and Radeon has a
-specific streaming 429 regression test.
+Streaming HTTP status validation is performed when the lazy upstream stream is
+first consumed. If the provider returns a non-2xx response, the error body is
+read while the HTTP context is still open, then converted to a safe streaming
+error. This avoids `ResponseNotRead` and prevents a provider 429/5xx from being
+silently converted into an internal proxy failure.
+
+## GLM-5.3 / NVIDIA NIM compatibility
+
+NVIDIA currently documents `z-ai/glm-5.3` and `z-ai/glm-5.3-flash` as reasoning
+models whose reasoning content is returned separately from the answer. The NVIDIA
+provider now explicitly sends `chat_template_kwargs.clear_thinking=true` for those
+two model IDs, avoiding accidental replay of hidden reasoning in chat history.
+The shared OpenAI parser also accepts `delta.content`, `message.content`, and
+legacy `choice.text` forms.
 

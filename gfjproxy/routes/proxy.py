@@ -115,7 +115,10 @@ def handle():
             print_exception(e)
 
         if 200 <= response.status <= 299:
-            xlogtime(user, "Processing succeeded", ref_time)
+            if jai_req.stream:
+                xlogtime(user, "Streaming response prepared", ref_time)
+            else:
+                xlogtime(user, "Processing succeeded", ref_time)
 
             if not proxy_test and (announcement := storage.announcement):
                 response.add_proxy_message(f"***\n{announcement}\n***")

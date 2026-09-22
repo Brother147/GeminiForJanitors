@@ -55,6 +55,13 @@ def nvidia_generate_content(
         ],
     }
 
+    if model.lower() in {"z-ai/glm-5.3", "z-ai/glm-5.3-flash"}:
+        # NVIDIA documents GLM-5.3/5.3-Flash as reasoning models with a
+        # separate reasoning_content channel. clear_thinking is recommended
+        # explicitly for chat requests so prior hidden reasoning is not replayed
+        # as ordinary assistant context.
+        nvidia_request["chat_template_kwargs"] = {"clear_thinking": True}
+
     for key, value in (settings or {}).items():
         if key == "temperature":
             nvidia_request["temperature"] = value

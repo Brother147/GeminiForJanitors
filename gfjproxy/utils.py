@@ -99,6 +99,18 @@ class ResponseHelper:
             + "\n\n"
         )
 
+    @staticmethod
+    def _stream_error_message(exc: Exception) -> str:
+        status_code = getattr(exc, "status_code", None)
+        if isinstance(status_code, int):
+            if status_code == 429:
+                return "Streaming provider rate limit reached. Please retry later."
+            if 400 <= status_code < 500:
+                return f"Streaming provider rejected the request (HTTP {status_code})."
+            if status_code >= 500:
+                return f"Streaming provider is unavailable (HTTP {status_code})."
+        return "Streaming provider error. Please retry."
+
     def build(self) -> Response:
         if self._status != 200 and len(self._messages) == 1:
             if self._wrap_errors:
@@ -117,14 +129,21 @@ class ResponseHelper:
                 def generate():
                     stream = iter(self._stream)
                     completed = False
+                    provider_chunks = 0
+                    provider_chars = 0
 
                     try:
-                        # Start the SSE response immediately. This prevents a
-                        # slow model/provider from looking like an unstarted
-                        # request to the downstream client.
-                        yield 'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n'
+                        # Flask's stream_with_context primes the generator once
+                        # when it is created. The first yield is therefore a
+                        # private context-primer; the second yield is the actual
+                        # client heartbeat sent before opening the upstream model
+                        # stream.
+                        yield ": gfjproxy context-primer\n\n"
+                        yield ": gfjproxy heartbeat\n\n"
                         for chunk in stream:
                             if chunk:
+                                provider_chunks += 1
+                                provider_chars += len(chunk)
                                 yield self._format_sse_delta(chunk)
                             else:
                                 # Empty chunks are heartbeats emitted by the
@@ -134,7 +153,21 @@ class ResponseHelper:
                         tail = self.message
                         if tail:
                             yield self._format_sse_delta(tail)
+                        if provider_chunks == 0 and not tail:
+                            from .logging import xlog
+
+                            xlog(None, "Streaming response ended without visible content")
+                            yield self._format_sse_delta(
+                                f"{self.PROXY_TAG_OPEN}Streaming provider returned no visible content. Please retry.{self.PROXY_TAG_CLOSE}"
+                            )
                         completed = True
+
+                        from .logging import xlog
+
+                        xlog(
+                            None,
+                            f"Streaming response completed: {provider_chunks} provider chunk(s), {provider_chars} character(s)",
+                        )
                     except GeneratorExit:
                         # Gunicorn/Flask closes the generator when the client
                         # disconnects. NEVER yield from finally after that.
@@ -148,7 +181,7 @@ class ResponseHelper:
 
                         xlog(None, f"Streaming response failed: {type(exc).__name__}")
                         yield self._format_sse_delta(
-                            f"{self.PROXY_TAG_OPEN}Streaming provider error. Please retry.{self.PROXY_TAG_CLOSE}"
+                            f"{self.PROXY_TAG_OPEN}{self._stream_error_message(exc)}{self.PROXY_TAG_CLOSE}"
                         )
                         completed = True
                     finally:
