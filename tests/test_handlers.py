@@ -45,7 +45,7 @@ COMMON_ERRORS = [
     },
     {
         "generate_content_mock": Exception("I'm a teapot"),
-        "expected_result": ("Unhanded exception from Google AI.", 502),
+        "expected_result": ("Unhandled exception from Google AI.", 502),
     },
     {
         "generate_content_mock": make_http_error(

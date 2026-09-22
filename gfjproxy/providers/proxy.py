@@ -21,7 +21,10 @@ def proxy_generate_content(
     This provider is for testing only.
     User paramater is only used for logging."""
 
-    api_key, url = api_key.split("@", maxsplit=1)
+    try:
+        api_key, url = api_key.split("@", maxsplit=1)
+    except ValueError:
+        return JaiResult(400, "Proxy API key must use the format <api_key>@<url>")
 
     proxy_request = {
         "model": model,
@@ -70,6 +73,6 @@ def proxy_generate_content(
         return JaiResult(e.response.status_code, e.response.text)
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
-        return JaiResult(502, "Unhanded exception from proxy.")
+        return JaiResult(502, "Unhandled exception from proxy.")
 
     return JaiResult(proxy_response.status_code, proxy_response.text)

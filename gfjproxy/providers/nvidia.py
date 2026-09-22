@@ -7,6 +7,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 
@@ -95,14 +96,17 @@ def nvidia_generate_content(
             if content_type.startswith("text/plain"):
                 message += f": {e.response.text}"
             elif content_type.startswith("application/json"):
-                if isinstance((error := e.response.json().get("error")), dict):
+                response_json = safe_response_json(e.response)
+                if isinstance(response_json, dict) and isinstance(
+                    (error := response_json.get("error")), dict
+                ):
                     if error_code := error.get("code"):
                         message += f" ({error_code})"
                     if error_message := error.get("message"):
                         message += f": {_simplify_error_message(error_message)}"
             elif content_type.startswith("application/problem+json"):
-                response_json = e.response.json()
-                if title := response_json.get("title"):
+                response_json = safe_response_json(e.response)
+                if isinstance(response_json, dict) and (title := response_json.get("title")):
                     message += f" ({title})"
                 if detail := response_json.get("detail"):
                     message += f": {detail}"
@@ -119,7 +123,7 @@ def nvidia_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
         track_stats("nvidia.failed.exception")
-        return JaiResult(502, "Unhanded exception from Nvidia NIM.")
+        return JaiResult(502, "Unhandled exception from Nvidia NIM.")
 
     try:
         text = str(nvidia_result["choices"][0]["message"]["content"] or "")

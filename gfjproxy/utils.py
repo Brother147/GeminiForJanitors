@@ -80,66 +80,95 @@ class ResponseHelper:
         self._stream = chunks
         return self
 
+    @staticmethod
+    def _format_sse_delta(text: str) -> str:
+        return (
+            "data: "
+            + json.dumps(
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": text},
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+            + "\n\n"
+        )
+
     def build(self) -> Response:
-        if self._status != 200 and len(self._messages) == 1:
+        if self._status != 200:
             if self._wrap_errors:
                 return Response(
                     response=[json.dumps({"error": self.message.strip()})],
                     status=self._status,
                     content_type="application/json; charset=utf-8",
                 )
-            else:
-                return Response(
-                    response=[self.message],
-                    status=self._status,
-                    content_type="text/plain; charset=utf-8",
-                )
+            return Response(
+                response=[self.message],
+                status=self._status,
+                content_type="text/plain; charset=utf-8",
+            )
         elif self._use_stream:
             if self._stream is not None:
                 def generate():
+                    stream = iter(self._stream)
+                    completed = False
+
                     try:
-                        for chunk in self._stream:
+                        # Start the SSE response immediately. This prevents a
+                        # slow model/provider from looking like an unstarted
+                        # request to the downstream client.
+                        yield 'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n'
+                        for chunk in stream:
                             if chunk:
-                                yield (
-                                    "data: "
-                                    + json.dumps(
-                                        {
-                                            "choices": [
-                                                {
-                                                    "index": 0,
-                                                    "delta": {"content": chunk},
-                                                }
-                                            ]
-                                        },
-                                        ensure_ascii=False,
-                                    )
-                                    + "\n\n"
-                                )
+                                yield self._format_sse_delta(chunk)
+                            else:
+                                # Empty chunks are heartbeats emitted by the
+                                # upstream adapters for non-text events.
+                                yield ": gfjproxy heartbeat\n\n"
 
                         tail = self.message
                         if tail:
-                            yield (
-                                "data: "
-                                + json.dumps(
-                                    {
-                                        "choices": [
-                                            {
-                                                "index": 0,
-                                                "delta": {"content": tail},
-                                            }
-                                        ]
-                                    },
-                                    ensure_ascii=False,
-                                )
-                                + "\n\n"
-                            )
+                            yield self._format_sse_delta(tail)
+                        completed = True
+                    except GeneratorExit:
+                        # Gunicorn/Flask closes the generator when the client
+                        # disconnects. NEVER yield from finally after that.
+                        raise
+                    except Exception as exc:  # noqa: BLE001 - stream boundary
+                        # HTTP headers/status are already sent for a stream, so
+                        # an exception can no longer become a normal HTTP error.
+                        # Emit a safe proxy message instead of silently ending
+                        # at 0 tokens/seconds.
+                        from .logging import xlog
+
+                        xlog(None, f"Streaming response failed: {type(exc).__name__}")
+                        yield self._format_sse_delta(
+                            f"{self.PROXY_TAG_OPEN}Streaming provider error. Please retry.{self.PROXY_TAG_CLOSE}"
+                        )
+                        completed = True
                     finally:
+                        close = getattr(stream, "close", None)
+                        if callable(close):
+                            try:
+                                close()
+                            except Exception:  # pragma: no cover - cleanup only
+                                pass
+
+                    if completed:
                         yield "data: [DONE]\n\n"
 
                 return Response(
                     response=stream_with_context(generate()),
                     status=200,
                     content_type="text/event-stream; charset=utf-8",
+                    headers={
+                        "Cache-Control": "no-cache, no-transform",
+                        "X-Accel-Buffering": "no",
+                    },
                 )
 
             return Response(
@@ -279,6 +308,14 @@ def is_proxy_test(request_json: dict) -> bool:
 
 def comma_split(s: str) -> list[str]:
     return [t for t in map(str.strip, s.split(",")) if t]
+
+
+def safe_response_json(response) -> object:
+    """Return decoded JSON from an HTTP response, or an empty object on failure."""
+    try:
+        return response.json()
+    except (TypeError, ValueError):
+        return {}
 
 
 ################################################################################

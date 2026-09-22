@@ -7,6 +7,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 
@@ -69,8 +70,8 @@ def deepseek_generate_content(
         message = "Error from DeepSeek"
         extras = ""
 
-        error = e.response.json()
-        if isinstance(error, dict):
+        error = safe_response_json(e.response)
+        if isinstance(error, dict) and error:
             if "error" in error:
                 error = error["error"]
             if error_code := error.get("code"):
@@ -91,7 +92,7 @@ def deepseek_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
         track_stats("deepseek.failed.exception")
-        return JaiResult(502, "Unhanded exception from DeepSeek.")
+        return JaiResult(502, "Unhandled exception from DeepSeek.")
 
     try:
         text = str(deepseek_result["choices"][0]["message"]["content"] or "")

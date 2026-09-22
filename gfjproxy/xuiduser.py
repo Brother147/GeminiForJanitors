@@ -15,6 +15,7 @@ import redis.exceptions
 import redis.lock
 from colorama.ansi import Fore as _colorama_ansi_fore
 
+from ._globals import PROCESS_TIMEOUT
 from .utils import base64url_encode, utctimestamp
 
 _color_palette = [
@@ -266,7 +267,10 @@ class RedisUserStorage(UserStorage):
     def lock(self, xuid: XUID) -> bool:
         lockid = xuid.lockid()
         if lockid not in self._locks:
-            self._locks[lockid] = self._client.lock(name=lockid, timeout=60)
+            self._locks[lockid] = self._client.lock(
+                name=lockid,
+                timeout=PROCESS_TIMEOUT + 60,
+            )
         return self._locks[lockid].acquire(blocking=False)
 
     def unlock(self, xuid: XUID):

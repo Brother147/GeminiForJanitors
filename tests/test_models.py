@@ -72,3 +72,16 @@ def test_parse_radeon_model_preserves_exact_case():
     assert jai_req.models == {"radeon": "DeepSeek-V4-Flash"}
 
 
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"messages": {}, "model": "gemini-2.5-flash"},
+        {"messages": [{"role": "user", "content": []}], "model": "gemini-2.5-flash"},
+        {"messages": [{"role": "user", "content": "hello"}], "model": []},
+    ],
+)
+def test_jai_request_rejects_malformed_payload_types(payload):
+    with pytest.raises(TypeError):
+        JaiRequest.parse(payload)

@@ -8,6 +8,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import gemini_sse_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 ################################################################################
@@ -176,8 +177,9 @@ def gemini_generate_content(
         else:
             stats_key = "g.failed.unknown"
 
-        if error := e.response.json():
-            if "error" in error:
+        error = safe_response_json(e.response)
+        if isinstance(error, dict) and error:
+            if isinstance(error.get("error"), dict):
                 error = error["error"]
 
             error_code = error.get("code", e.response.status_code)
@@ -269,7 +271,7 @@ def gemini_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))  # These are R E A L L Y anomalous
         track_stats("g.failed.unknown")
-        return JaiResult(502, "Unhanded exception from Google AI.")
+        return JaiResult(502, "Unhandled exception from Google AI.")
 
     text = ""
     extras = ""

@@ -7,6 +7,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 
@@ -72,7 +73,10 @@ def openrouter_generate_content(
         message = "Error from OpenRouter"
         extras = ""
 
-        if isinstance(error := e.response.json().get("error"), dict):
+        response_json = safe_response_json(e.response)
+        if isinstance(response_json, dict) and isinstance(
+            error := response_json.get("error"), dict
+        ):
             if error_code := error.get("code"):
                 message += f" ({error_code})"
             if error_message := error.get("message"):
@@ -96,7 +100,7 @@ def openrouter_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
         track_stats("openrouter.failed.exception")
-        return JaiResult(502, "Unhanded exception from OpenRouter.")
+        return JaiResult(502, "Unhandled exception from OpenRouter.")
 
     if isinstance(error := openrouter_result.get("error"), dict) and error:
         message = "Error from OpenRouter"

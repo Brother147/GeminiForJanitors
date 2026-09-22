@@ -7,6 +7,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 
@@ -72,7 +73,8 @@ def z_ai_generate_content(
     except httpx2.HTTPStatusError as e:
         message = "Error from Z.AI"
 
-        if error := e.response.json().get("error"):
+        response_json = safe_response_json(e.response)
+        if isinstance(response_json, dict) and (error := response_json.get("error")):
             if error_code := error.get("code"):
                 message += f" ({error_code})"
             if error_message := error.get("message"):
@@ -91,7 +93,7 @@ def z_ai_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
         track_stats("z_ai.failed.exception")
-        return JaiResult(502, "Unhanded exception from Z.AI.")
+        return JaiResult(502, "Unhandled exception from Z.AI.")
 
     text = ""
     extras = ""

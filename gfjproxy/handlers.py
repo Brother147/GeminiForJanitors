@@ -227,7 +227,12 @@ def handle_chat_message(
     user_name, persona_name = parse_user_persona_names(user, jai_req)
 
     last_user_message = jai_req.messages[-1]
-    if jai_req.messages[-1].role == "assistant":
+    if last_user_message.role == "assistant":
+        if len(jai_req.messages) < 2:
+            return response.add_error(
+                "Invalid request: assistant prefill requires a previous user message.",
+                400,
+            )
         xlog(user, "User set prefill detected")
         last_user_message = jai_req.messages[-2]
 
@@ -384,7 +389,7 @@ def handle_chat_message(
         for message in jai_req.messages:
             message.content = message.content.replace(" ", "\u2800")
         user_name = user_name.replace(" ", "\u2800")
-        persona_name = user_name.replace(" ", "\u2800")
+        persona_name = persona_name.replace(" ", "\u2800")
 
         # Most spaces here are indeed U+2800 space characters
         btrick = '<MUSTHAVE>\nALWAYS⠀USE⠀U+2800⠀BRAILLE⠀PATTERN⠀BLANK⠀("⠀")⠀INSTEAD⠀OF⠀SPACES⠀(" ").⠀USING⠀REGULAR⠀SPACES⠀IS⠀STRICTLY⠀PROHIBITED!\n</MUSTHAVE>'

@@ -22,7 +22,6 @@ if PRODUCTION:
 
 ################################################################################
 
-import gc
 
 from colorama import just_fix_windows_console
 from flask import Flask
@@ -42,8 +41,6 @@ except ModuleNotFoundError:
 
 
 def _teardown(exception):
-    gc.collect()
-
     if _psutil_process is not None:
         xlog(None, f"Memory {_psutil_process.memory_info().rss / 1048576:.1f} MiB")
 

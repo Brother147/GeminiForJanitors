@@ -29,14 +29,22 @@ class JaiMessage:
 
         jai_msg = JaiMessage()
 
-        if role := data.get("role"):
-            jai_msg.role = role
+        role = data.get("role")
+        if role is not None:
+            if not isinstance(role, str):
+                raise TypeError("Message role must be a string")
+            if role:
+                jai_msg.role = role
 
-        if content := data.get("content"):
-            if role == "user":
-                jai_msg.commands, jai_msg.content = parse_message(content)
-            else:
-                jai_msg.content = strip_message(content)
+        content = data.get("content")
+        if content is not None:
+            if not isinstance(content, str):
+                raise TypeError("Message content must be a string")
+            if content:
+                if role == "user":
+                    jai_msg.commands, jai_msg.content = parse_message(content)
+                else:
+                    jai_msg.content = strip_message(content)
 
         return jai_msg
 
@@ -99,31 +107,38 @@ class JaiRequest:
         if max_tokens := data.get("max_tokens"):
             jai_req.max_tokens = max_tokens
 
-        if messages := data.get("messages"):
+        messages = data.get("messages")
+        if messages is not None:
+            if not isinstance(messages, list):
+                raise TypeError("Request messages must be a list")
             jai_req.messages = [JaiMessage.parse(jai_msg) for jai_msg in messages]
 
-        if models := data.get("model"):
-            for model in comma_split(models):
-                normalized_model = model.lower()
-                if "/" in model:
-                    provider, model_name = model.split("/", maxsplit=1)
-                    provider = provider.lower()
-                    # Radeon model IDs are case-sensitive; preserve the exact
-                    # spelling JanitorAI supplied. Keep existing normalization
-                    # for every other provider.
-                    if provider != "radeon":
-                        model_name = model_name.lower()
-                    jai_req.models[provider] = model_name
-                elif normalized_model.startswith(("gemini-", "gemma-")):
-                    jai_req.models["google"] = normalized_model
-                elif normalized_model.startswith("deepseek-"):
-                    jai_req.models["deepseek"] = normalized_model
-                else:
-                    # Build a comma-separated list of unknown models
-                    if unknown := jai_req.models.get("unknown"):
-                        jai_req.models["unknown"] = f"{unknown}, {normalized_model}"
+        models = data.get("model")
+        if models is not None:
+            if not isinstance(models, str):
+                raise TypeError("Request model must be a string")
+            if models:
+                for model in comma_split(models):
+                    normalized_model = model.lower()
+                    if "/" in model:
+                        provider, model_name = model.split("/", maxsplit=1)
+                        provider = provider.lower()
+                        # Radeon model IDs are case-sensitive; preserve the exact
+                        # spelling JanitorAI supplied. Keep existing normalization
+                        # for every other provider.
+                        if provider != "radeon":
+                            model_name = model_name.lower()
+                        jai_req.models[provider] = model_name
+                    elif normalized_model.startswith(("gemini-", "gemma-")):
+                        jai_req.models["google"] = normalized_model
+                    elif normalized_model.startswith("deepseek-"):
+                        jai_req.models["deepseek"] = normalized_model
                     else:
-                        jai_req.models["unknown"] = normalized_model
+                        # Build a comma-separated list of unknown models
+                        if unknown := jai_req.models.get("unknown"):
+                            jai_req.models["unknown"] = f"{unknown}, {normalized_model}"
+                        else:
+                            jai_req.models["unknown"] = normalized_model
 
         if stream := data.get("stream"):
             jai_req.stream = stream

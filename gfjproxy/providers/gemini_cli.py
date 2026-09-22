@@ -13,7 +13,7 @@ from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsa
 from ..statistics import track_stats
 from ..storage import storage
 from ..streaming import gemini_sse_completion
-from ..utils import base64url_decode, utcfromtimestamp, utcnow
+from ..utils import base64url_decode, safe_response_json, utcfromtimestamp, utcnow
 from ..xuiduser import XUID
 
 # https://github.com/google-gemini/gemini-cli/blob/17b37144a96da13bf7a0917411bc1d34142609d7/packages/core/src/code_assist/oauth2.ts#L72
@@ -178,7 +178,9 @@ def gemini_cli_refresh_credentials(
     except httpx2.HTTPStatusError as e:
         error = {}
         if e.response.headers.get("content-type", "").startswith("application/json"):
-            error = e.response.json()
+            decoded = safe_response_json(e.response)
+            if isinstance(decoded, dict):
+                error = decoded
 
         message = f"Refresh credentials error: {e.response.status_code} {e.response.reason_phrase}"
 
@@ -340,7 +342,9 @@ def gemini_cli_generate_content_ex(
     except httpx2.HTTPStatusError as e:
         error_json = {}
         if e.response.headers.get("content-type", "").startswith("application/json"):
-            error_json = e.response.json()
+            decoded = safe_response_json(e.response)
+            if isinstance(decoded, dict):
+                error_json = decoded
 
         message = f"Gemini CLI generate error: {e.response.status_code} {e.response.reason_phrase}"
         extras = ""
@@ -393,8 +397,16 @@ def gemini_cli_generate_content(
         this_proxy_url = PROXY_URL.rstrip("/")
 
         message = "API key not valid."
-        proxy_url = base64url_decode(api_key.split(".")[2]).decode().rstrip("/")
-        if proxy_url != this_proxy_url:
+        parts = api_key.split(".")
+        if len(parts) >= 3:
+            try:
+                proxy_url = base64url_decode(parts[2]).decode().rstrip("/")
+            except (UnicodeDecodeError, ValueError):
+                proxy_url = ""
+        else:
+            proxy_url = ""
+
+        if proxy_url and proxy_url != this_proxy_url:
             message = f"This API key is from another proxy ({proxy_url})."
 
         message += f" You need to create an API key on this proxy's keyring ({this_proxy_url}/keyring)."

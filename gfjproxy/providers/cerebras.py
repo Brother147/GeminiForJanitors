@@ -7,6 +7,7 @@ from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
+from ..utils import safe_response_json
 from ..xuiduser import XUID
 
 
@@ -68,8 +69,9 @@ def cerebras_generate_content(
     except httpx2.HTTPStatusError as e:
         message = "Error from Cerebras"
 
-        if error := e.response.json():
-            if "error" in error:
+        error = safe_response_json(e.response)
+        if isinstance(error, dict) and error:
+            if isinstance(error.get("error"), dict):
                 error = error["error"]
 
             if error_code := error.get("code"):
@@ -90,7 +92,7 @@ def cerebras_generate_content(
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(user, repr(e))
         track_stats("cerebras.failed.exception")
-        return JaiResult(502, "Unhanded exception from Cerebras.")
+        return JaiResult(502, "Unhandled exception from Cerebras.")
 
     try:
         text = str(cerebras_result["choices"][0]["message"]["content"] or "")

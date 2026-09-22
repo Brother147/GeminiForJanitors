@@ -225,3 +225,20 @@ def test_locking(storage):
 
 
 ################################################################################
+
+
+def test_redis_lock_timeout_covers_process_timeout(mocker):
+    from gfjproxy import xuiduser
+
+    client = mocker.Mock()
+    storage = xuiduser.RedisUserStorage.__new__(xuiduser.RedisUserStorage)
+    storage._locks = {}
+    storage._client = client
+    lock = mocker.Mock()
+    client.lock.return_value = lock
+
+    user = xuiduser.XUID("test", "user")
+    assert storage.lock(user) is lock.acquire.return_value
+    client.lock.assert_called_once_with(
+        name=user.lockid(), timeout=xuiduser.PROCESS_TIMEOUT + 60
+    )
