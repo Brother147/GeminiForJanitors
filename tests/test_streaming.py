@@ -1,5 +1,3 @@
-import json
-
 import httpx2
 import pytest
 from flask import Flask
@@ -119,6 +117,6 @@ def test_response_helper_converts_stream_error_to_safe_sse():
         chunks = list(response.response)
 
     body = "".join(chunks)
-    assert json.dumps("Streaming provider error. Please retry.") in body
+    assert "Streaming provider error. Please retry." in body
     assert "secret upstream details" not in body
     assert body.endswith("data: [DONE]\n\n")
