@@ -85,3 +85,20 @@ def test_parse_radeon_model_preserves_exact_case():
 def test_jai_request_rejects_malformed_payload_types(payload):
     with pytest.raises(TypeError):
         JaiRequest.parse(payload)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("max_tokens", "100"),
+        ("stream", "true"),
+        ("top_k", 1.5),
+        ("temperature", "0.8"),
+        ("top_p", "0.9"),
+        ("frequency_penalty", "0.1"),
+        ("repetition_penalty", "1.1"),
+    ],
+)
+def test_jai_request_rejects_invalid_generation_setting_types(field, value):
+    with pytest.raises(TypeError):
+        JaiRequest.parse({"model": "gemini-2.5-flash", field: value})

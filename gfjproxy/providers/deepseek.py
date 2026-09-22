@@ -43,10 +43,10 @@ def deepseek_generate_content(
             deepseek_request["max_tokens"] = value
         elif key == "top_p":
             deepseek_request["top_p"] = value
-        elif key == "frequency_penalty":
-            deepseek_request["frequency_penalty"] = value
-        elif key == "repetition_penalty":
-            deepseek_request["presence_penalty"] = value
+        elif key in {"frequency_penalty", "repetition_penalty"}:
+            # DeepSeek currently documents both legacy penalty parameters as
+            # deprecated/no-op. Do not silently substitute one for the other.
+            continue
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -93,6 +93,11 @@ def deepseek_generate_content(
         xlog(user, repr(e))
         track_stats("deepseek.failed.exception")
         return JaiResult(502, "Unhandled exception from DeepSeek.")
+
+    if not isinstance(deepseek_result, dict):
+        xlog(user, f"Invalid response shape from DeepSeek: {type(deepseek_result).__name__}")
+        track_stats("deepseek.rejected")
+        return JaiResult(502, "Invalid response from DeepSeek.")
 
     try:
         text = str(deepseek_result["choices"][0]["message"]["content"] or "")

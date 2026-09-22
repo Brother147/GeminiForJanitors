@@ -7,6 +7,7 @@ from gfjproxy.providers.radeon import (
     RADEON_CHAT_COMPLETIONS_URL,
     radeon_generate_content,
 )
+from gfjproxy.streaming import StreamingHTTPError
 
 
 def test_radeon_provider_sends_openai_compatible_request(mocker):
@@ -154,9 +155,14 @@ def test_radeon_provider_handles_streaming_http_error_response(mocker, status):
         {"stream": True},
     )
 
-    assert result.status == status
-    assert "rate_limited" in result.error
-    assert "too many requests" in result.error
+    assert result.status == 200
+    assert result.error == ""
+    assert result.stream is not None
+
+    with pytest.raises(StreamingHTTPError) as caught:
+        next(result.stream)
+
+    assert caught.value.status_code == status
     response.read.assert_called_once()
     context.__exit__.assert_called_once()
 

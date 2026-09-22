@@ -224,6 +224,9 @@ def handle_chat_message(
         + "".join(m.role[0] if m.role else "?" for m in jai_req.messages),
     )
 
+    if not jai_req.messages:
+        return response.add_error("Invalid request: messages cannot be empty.", 400)
+
     user_name, persona_name = parse_user_persona_names(user, jai_req)
 
     last_user_message = jai_req.messages[-1]
@@ -512,7 +515,17 @@ def handle_chat_message(
         else:
             stream = result.stream
             if used_btrick:
-                stream = (chunk.replace("\u2800", " ") for chunk in stream)
+
+                def transform_btrick(source):
+                    try:
+                        for chunk in source:
+                            yield chunk.replace("\u2800", " ")
+                    finally:
+                        close = getattr(source, "close", None)
+                        if callable(close):
+                            close()
+
+                stream = transform_btrick(stream)
             response.add_stream(stream)
 
             if result.extras:

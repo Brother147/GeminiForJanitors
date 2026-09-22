@@ -536,11 +536,9 @@ Makes the selection of words the AI can pick from based on how likely they are.
 
 ## **Repetition Penalty**
 `//advset_repetition_penalty on|off|this`
-Not supported by `z_ai`, AMD Radeon Cloud, and some `google` models.
+Not every provider exposes `repetition_penalty`; providers without a direct equivalent ignore it.
 
-Encourages the AI to use new words.
-
-The proxy implements this as "Presence Penalty" for providers that expose that compatible parameter. Providers without support ignore it.
+Penalizes repeated tokens. The proxy passes `repetition_penalty` through unchanged only where the provider API supports that parameter; it does not substitute `presence_penalty` because the two settings are not equivalent.
 
 ## **Frequency Penalty**
 `//advset_frequency_penalty on|off|this`

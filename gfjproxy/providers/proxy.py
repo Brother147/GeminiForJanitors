@@ -50,7 +50,7 @@ def proxy_generate_content(
         elif key == "frequency_penalty":
             proxy_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            proxy_request["presence_penalty"] = value
+            proxy_request["repetition_penalty"] = value
 
     headers = {
         "Accept": "application/json",

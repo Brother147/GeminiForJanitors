@@ -110,6 +110,11 @@ def groq_generate_content(
         track_stats("groq.failed.exception")
         return JaiResult(502, "Unhandled exception from Groq.")
 
+    if not isinstance(groq_result, dict):
+        xlog(user, f"Invalid response shape from Groq: {type(groq_result).__name__}")
+        track_stats("groq.rejected")
+        return JaiResult(502, "Invalid response from Groq.")
+
     try:
         text = str(groq_result["choices"][0]["message"]["content"] or "")
     except (KeyError, IndexError, TypeError):

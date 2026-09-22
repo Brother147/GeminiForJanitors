@@ -38,10 +38,8 @@ def z_ai_generate_content(
         ],
     }
 
-    # As of April 6, 2026, Z.AI documentation does not mention support for
-    # top_k, frequency_penalty or repetition_penalty in their API. While these
-    # using settings does not return an error, //help advsettings still
-    # documents Z.AI as having no support.
+    # Z.AI's current OpenAI-compatible API supports these sampling controls
+    # for current GLM models. Parameters are forwarded unchanged below.
 
     for key, value in (settings or {}).items():
         if key == "temperature":
@@ -55,7 +53,7 @@ def z_ai_generate_content(
         elif key == "frequency_penalty":
             z_ai_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            z_ai_request["presence_penalty"] = value
+            z_ai_request["repetition_penalty"] = value
 
     try:
         z_ai_result = openai_chat_completion(
@@ -74,7 +72,8 @@ def z_ai_generate_content(
         message = "Error from Z.AI"
 
         response_json = safe_response_json(e.response)
-        if isinstance(response_json, dict) and (error := response_json.get("error")):
+        error = response_json.get("error") if isinstance(response_json, dict) else None
+        if isinstance(error, dict):
             if error_code := error.get("code"):
                 message += f" ({error_code})"
             if error_message := error.get("message"):
@@ -98,6 +97,11 @@ def z_ai_generate_content(
     text = ""
     extras = ""
     metadata = JaiResultMetadata()
+
+    if not isinstance(z_ai_result, dict):
+        xlog(user, f"Invalid response shape from Z.AI: {type(z_ai_result).__name__}")
+        track_stats("z_ai.rejected")
+        return JaiResult(502, "Invalid response from Z.AI.", metadata=metadata)
 
     message = {}
 

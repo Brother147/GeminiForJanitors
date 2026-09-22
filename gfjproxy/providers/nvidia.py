@@ -40,7 +40,6 @@ def nvidia_generate_content(
         # For some models, "conversation roles must alternate user/assistant/user/assistant/"
         messages.insert(0, JaiMessage(content=".", role="user"))
 
-
     stream = bool((settings or {}).get("stream", False))
 
     nvidia_request = {
@@ -74,7 +73,7 @@ def nvidia_generate_content(
         elif key == "frequency_penalty":
             nvidia_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            nvidia_request["presence_penalty"] = value
+            nvidia_request["repetition_penalty"] = value
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -90,7 +89,6 @@ def nvidia_generate_content(
         )
         if stream:
             return JaiResult(200, "", stream=nvidia_result)
-
 
     except httpx2.TimeoutException:
         track_stats("nvidia.time_out")
@@ -131,6 +129,11 @@ def nvidia_generate_content(
         xlog(user, repr(e))
         track_stats("nvidia.failed.exception")
         return JaiResult(502, "Unhandled exception from Nvidia NIM.")
+
+    if not isinstance(nvidia_result, dict):
+        xlog(user, f"Invalid response shape from Nvidia NIM: {type(nvidia_result).__name__}")
+        track_stats("nvidia.rejected")
+        return JaiResult(502, "Invalid response from Nvidia NIM.")
 
     try:
         text = str(nvidia_result["choices"][0]["message"]["content"] or "")

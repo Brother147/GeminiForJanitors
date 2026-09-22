@@ -48,7 +48,7 @@ def openrouter_generate_content(
         elif key == "frequency_penalty":
             openrouter_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            openrouter_request["presence_penalty"] = value
+            openrouter_request["repetition_penalty"] = value
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -101,6 +101,11 @@ def openrouter_generate_content(
         xlog(user, repr(e))
         track_stats("openrouter.failed.exception")
         return JaiResult(502, "Unhandled exception from OpenRouter.")
+
+    if not isinstance(openrouter_result, dict):
+        xlog(user, f"Invalid response shape from OpenRouter: {type(openrouter_result).__name__}")
+        track_stats("openrouter.failed.anomalous")
+        return JaiResult(502, "Invalid response from OpenRouter.")
 
     if isinstance(error := openrouter_result.get("error"), dict) and error:
         message = "Error from OpenRouter"

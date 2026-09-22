@@ -104,7 +104,10 @@ class JaiRequest:
 
         jai_req = JaiRequest()
 
-        if max_tokens := data.get("max_tokens"):
+        max_tokens = data.get("max_tokens")
+        if max_tokens is not None:
+            if isinstance(max_tokens, bool) or not isinstance(max_tokens, int):
+                raise TypeError("Request max_tokens must be an integer")
             jai_req.max_tokens = max_tokens
 
         messages = data.get("messages")
@@ -140,23 +143,30 @@ class JaiRequest:
                         else:
                             jai_req.models["unknown"] = normalized_model
 
-        if stream := data.get("stream"):
+        stream = data.get("stream")
+        if stream is not None:
+            if not isinstance(stream, bool):
+                raise TypeError("Request stream must be a boolean")
             jai_req.stream = stream
 
-        if temperature := data.get("temperature"):
-            jai_req.temperature = temperature
+        numeric_fields = (
+            "temperature",
+            "frequency_penalty",
+            "repetition_penalty",
+            "top_p",
+        )
+        for field_name in numeric_fields:
+            value = data.get(field_name)
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise TypeError(f"Request {field_name} must be a number")
+                setattr(jai_req, field_name, value)
 
-        if top_k := data.get("top_k"):
+        top_k = data.get("top_k")
+        if top_k is not None:
+            if isinstance(top_k, bool) or not isinstance(top_k, int):
+                raise TypeError("Request top_k must be an integer")
             jai_req.top_k = top_k
-
-        if top_p := data.get("top_p"):
-            jai_req.top_p = top_p
-
-        if frequency_penalty := data.get("frequency_penalty"):
-            jai_req.frequency_penalty = frequency_penalty
-
-        if repetition_penalty := data.get("repetition_penalty"):
-            jai_req.repetition_penalty = repetition_penalty
 
         return jai_req
 

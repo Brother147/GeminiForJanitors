@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from itertools import groupby
 
-from flask import Response, stream_with_context
+from flask import Response
 from httpx2 import HTTPError
 
 from .http_client import http_client
@@ -91,6 +91,26 @@ class ResponseHelper:
                         {
                             "index": 0,
                             "delta": {"content": text},
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+            + "\n\n"
+        )
+
+    @staticmethod
+    def _format_sse_finish() -> str:
+        return (
+            "data: "
+            + json.dumps(
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
                         }
                     ]
                 },
@@ -101,6 +121,11 @@ class ResponseHelper:
 
     @staticmethod
     def _stream_error_message(exc: Exception) -> str:
+        from .streaming import StreamingTimeoutError
+
+        if isinstance(exc, StreamingTimeoutError):
+            return "Streaming provider timed out. Please retry."
+
         status_code = getattr(exc, "status_code", None)
         if isinstance(status_code, int):
             if status_code == 429:
@@ -126,6 +151,7 @@ class ResponseHelper:
             )
         elif self._use_stream:
             if self._stream is not None:
+
                 def generate():
                     stream = iter(self._stream)
                     completed = False
@@ -133,22 +159,18 @@ class ResponseHelper:
                     provider_chars = 0
 
                     try:
-                        # Flask's stream_with_context primes the generator once
-                        # when it is created. The first yield is therefore a
-                        # private context-primer; the second yield is the actual
-                        # client heartbeat sent before opening the upstream model
-                        # stream.
-                        yield ": gfjproxy context-primer\n\n"
-                        yield ": gfjproxy heartbeat\n\n"
+                        # Use an actual SSE data event for heartbeats. Some
+                        # clients, including strict OpenAI-compatible parsers,
+                        # ignore comment-only SSE frames.
+                        yield self._format_sse_delta("")
+
                         for chunk in stream:
                             if chunk:
                                 provider_chunks += 1
                                 provider_chars += len(chunk)
                                 yield self._format_sse_delta(chunk)
                             else:
-                                # Empty chunks are heartbeats emitted by the
-                                # upstream adapters for non-text events.
-                                yield ": gfjproxy heartbeat\n\n"
+                                yield self._format_sse_delta("")
 
                         tail = self.message
                         if tail:
@@ -156,7 +178,10 @@ class ResponseHelper:
                         if provider_chunks == 0 and not tail:
                             from .logging import xlog
 
-                            xlog(None, "Streaming response ended without visible content")
+                            xlog(
+                                None,
+                                "Streaming response ended without visible content",
+                            )
                             yield self._format_sse_delta(
                                 f"{self.PROXY_TAG_OPEN}Streaming provider returned no visible content. Please retry.{self.PROXY_TAG_CLOSE}"
                             )
@@ -169,17 +194,20 @@ class ResponseHelper:
                             f"Streaming response completed: {provider_chunks} provider chunk(s), {provider_chars} character(s)",
                         )
                     except GeneratorExit:
-                        # Gunicorn/Flask closes the generator when the client
-                        # disconnects. NEVER yield from finally after that.
                         raise
                     except Exception as exc:  # noqa: BLE001 - stream boundary
-                        # HTTP headers/status are already sent for a stream, so
-                        # an exception can no longer become a normal HTTP error.
-                        # Emit a safe proxy message instead of silently ending
-                        # at 0 tokens/seconds.
                         from .logging import xlog
 
-                        xlog(None, f"Streaming response failed: {type(exc).__name__}")
+                        status_code = getattr(exc, "status_code", None)
+                        status_text = (
+                            f", status={status_code}"
+                            if isinstance(status_code, int)
+                            else ""
+                        )
+                        xlog(
+                            None,
+                            f"Streaming response failed: {type(exc).__name__}{status_text}",
+                        )
                         yield self._format_sse_delta(
                             f"{self.PROXY_TAG_OPEN}{self._stream_error_message(exc)}{self.PROXY_TAG_CLOSE}"
                         )
@@ -191,36 +219,33 @@ class ResponseHelper:
                                 close()
 
                     if completed:
+                        yield self._format_sse_finish()
                         yield "data: [DONE]\n\n"
 
                 return Response(
-                    response=stream_with_context(generate()),
+                    response=generate(),
                     status=200,
                     content_type="text/event-stream; charset=utf-8",
                     headers={
-                        "Cache-Control": "no-cache, no-transform",
+                        "Cache-Control": "no-store, no-cache, no-transform, max-age=0",
+                        "Content-Encoding": "identity",
                         "X-Accel-Buffering": "no",
                     },
+                    direct_passthrough=True,
                 )
 
             return Response(
-                response=[
-                    json.dumps(
-                        {
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {
-                                        "content": self.message,
-                                    },
-                                    "finish_reason": "stop",
-                                }
-                            ]
-                        }
-                    ).join(("data: ", "\n\ndata: [DONE]\n\n")),
-                ],
+                response=self._format_sse_delta(self.message)
+                + self._format_sse_finish()
+                + "data: [DONE]\n\n",
                 status=200,
                 content_type="text/event-stream; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-store, no-cache, no-transform, max-age=0",
+                    "Content-Encoding": "identity",
+                    "X-Accel-Buffering": "no",
+                },
+                direct_passthrough=True,
             )
         else:
             return Response(
@@ -301,7 +326,6 @@ class ResponseHelper:
     @property
     def response(self):
         return self.build().response
-
 
 ################################################################################
 

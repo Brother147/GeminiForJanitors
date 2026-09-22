@@ -51,7 +51,8 @@ def cerebras_generate_content(
         elif key == "frequency_penalty":
             cerebras_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            cerebras_request["presence_penalty"] = value
+            # Cerebras documents presence_penalty, but not repetition_penalty.
+            continue
 
     try:
         cerebras_result = openai_chat_completion(
@@ -93,6 +94,11 @@ def cerebras_generate_content(
         xlog(user, repr(e))
         track_stats("cerebras.failed.exception")
         return JaiResult(502, "Unhandled exception from Cerebras.")
+
+    if not isinstance(cerebras_result, dict):
+        xlog(user, f"Invalid response shape from Cerebras: {type(cerebras_result).__name__}")
+        track_stats("cerebras.rejected")
+        return JaiResult(502, "Invalid response from Cerebras.")
 
     try:
         text = str(cerebras_result["choices"][0]["message"]["content"] or "")

@@ -2,7 +2,13 @@ import httpx2
 import pytest
 from flask import Flask
 
-from gfjproxy.streaming import gemini_sse_completion, openai_chat_completion
+from gfjproxy.streaming import (
+    StreamingProviderError,
+    StreamingTimeoutError,
+    _ManagedStream,
+    gemini_sse_completion,
+    openai_chat_completion,
+)
 from gfjproxy.utils import ResponseHelper
 
 
@@ -59,6 +65,7 @@ def test_stream_closes_even_before_first_next(mocker):
 def test_stream_reads_error_body_before_reraising_status_error(mocker):
     request = httpx2.Request("POST", "https://example.test")
     response = mocker.MagicMock()
+    response.status_code = 429
     response.raise_for_status.side_effect = httpx2.HTTPStatusError(
         "429", request=request, response=response
     )
@@ -127,7 +134,9 @@ def test_response_helper_does_not_yield_after_generatorexit():
     with app.test_request_context("/"):
         response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
         iterator = response.response
-        assert next(iterator).startswith(": gfjproxy heartbeat")
+        first = next(iterator)
+        assert first.startswith("data: ")
+        assert '"delta": {"content": ""}' in first
         iterator.close()
 
 
@@ -160,8 +169,91 @@ def test_response_helper_sends_heartbeat_before_slow_stream():
         first = next(iterator)
         second = next(iterator)
 
-    assert first == ": gfjproxy heartbeat\n\n"
+    assert first.startswith("data: ")
+    assert '"delta": {"content": ""}' in first
     assert '"content": "answer"' in second
+
+
+def test_stream_emits_periodic_heartbeat_while_upstream_is_silent():
+    import threading
+
+    release = threading.Event()
+    started = threading.Event()
+    closed = threading.Event()
+
+    def open_factory():
+        started.set()
+        release.wait(timeout=2)
+
+        class Context:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                closed.set()
+                return False
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+        return Context(), Response()
+
+    def iterator_factory(_response):
+        yield "answer"
+
+    stream = _ManagedStream(
+        open_factory,
+        iterator_factory,
+        heartbeat_interval=0.01,
+    )
+
+    first = next(stream)
+    assert first == ""
+    assert started.is_set()
+
+    release.set()
+    assert next(stream) == "answer"
+    stream.close()
+    assert closed.wait(timeout=1)
+
+
+def test_stream_raises_on_provider_sse_error(mocker):
+    _response, context = _stream_context(
+        mocker,
+        [b'data: {"error":{"code":"rate_limited","message":"too many requests"}}'],
+    )
+
+    stream = openai_chat_completion(
+        "https://example.test/v1/chat/completions",
+        request={"model": "test", "stream": True},
+        headers={},
+        timeout=123,
+    )
+
+    with pytest.raises(StreamingProviderError, match="rate_limited"):
+        next(stream)
+    context.__exit__.assert_called_once()
+
+
+
+def test_stream_reports_upstream_timeout(mocker):
+    _response, context = _stream_context(
+        mocker,
+        [],
+        status_error=httpx2.ReadTimeout("timed out"),
+    )
+
+    stream = openai_chat_completion(
+        "https://example.test/v1/chat/completions",
+        request={"model": "test", "stream": True},
+        headers={},
+        timeout=123,
+    )
+
+    with pytest.raises(StreamingTimeoutError):
+        next(stream)
+    context.__exit__.assert_called_once()
 
 
 def test_response_helper_reports_empty_provider_stream():
