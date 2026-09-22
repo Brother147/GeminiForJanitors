@@ -8,6 +8,7 @@ import re
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from itertools import groupby
@@ -153,10 +154,8 @@ class ResponseHelper:
                     finally:
                         close = getattr(stream, "close", None)
                         if callable(close):
-                            try:
+                            with suppress(Exception):  # pragma: no cover - cleanup only
                                 close()
-                            except Exception:  # pragma: no cover - cleanup only
-                                pass
 
                     if completed:
                         yield "data: [DONE]\n\n"

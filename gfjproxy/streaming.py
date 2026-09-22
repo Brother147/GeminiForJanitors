@@ -2,9 +2,9 @@
 
 import json
 import sys
-from collections.abc import Iterator
-from contextlib import AbstractContextManager
-from typing import Any, Callable
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, suppress
+from typing import Any
 
 import httpx2
 
@@ -60,10 +60,8 @@ class _ManagedStream(Iterator[str]):
 
         close = getattr(self._iterator, "close", None)
         if callable(close):
-            try:
+            with suppress(Exception):  # pragma: no cover - cleanup only
                 close()
-            except Exception:  # pragma: no cover - cleanup only
-                pass
 
         _close_stream(self._context)
 
@@ -94,21 +92,17 @@ def _open_stream(
         response = context.__enter__()
         response.raise_for_status()
     except BaseException:
-        try:
+        with suppress(Exception):  # pragma: no cover - defensive cleanup only
             context.__exit__(*sys.exc_info())
-        except Exception:  # pragma: no cover - defensive cleanup only
-            pass
         raise
 
     return context, response
 
 
 def _close_stream(context: AbstractContextManager) -> None:
-    try:
+    # Cleanup must never mask the original streaming/disconnect result.
+    with suppress(Exception):
         context.__exit__(None, None, None)
-    except Exception:
-        # Cleanup must never mask the original streaming/disconnect result.
-        pass
 
 
 def _iter_openai_text(response: Any) -> Iterator[str]:
