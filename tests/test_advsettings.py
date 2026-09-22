@@ -57,7 +57,7 @@ def test_advset_this(
     mocker: MockerFixture, provider: str, advsettings: dict[str, int | float]
 ):
     """Check that the given advanced settings are being applied."""
-  
+
     mock_call = mocker.patch("gfjproxy.streaming.http_client.post")
     mock_response = mocker.Mock()
     mock_response.status_code = 200

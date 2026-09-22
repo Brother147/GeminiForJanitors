@@ -137,6 +137,10 @@ def radeon_generate_content(
             track_stats("radeon.failed.unknown")
 
         return JaiResult(e.response.status_code, message, extras=extras)
+    except ValueError as e:
+        _log(user, _redact_api_key(repr(e), api_key))
+        track_stats("radeon.failed.invalid_response")
+        return JaiResult(502, "Invalid response from AMD Radeon Cloud.")
     except Exception as e:  # ruff: ignore[BLE001]
         _log(user, _redact_api_key(repr(e), api_key))
         track_stats("radeon.failed.exception")
