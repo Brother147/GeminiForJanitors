@@ -11,7 +11,6 @@ import httpx2
 
 from .http_client import http_client
 
-
 STREAM_HEARTBEAT_INTERVAL = 10.0
 _QUEUE_END = object()
 _QUEUE_ERROR = object()
