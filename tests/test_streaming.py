@@ -9,10 +9,10 @@ from gfjproxy.utils import ResponseHelper
 
 
 def _stream_context(mocker, lines, *, status_error=None):
-    response = mocker.Mock()
+    response = mocker.MagicMock()
     response.iter_lines.return_value = lines
     response.raise_for_status.side_effect = status_error
-    context = mocker.Mock()
+    context = mocker.MagicMock()
     context.__enter__.return_value = response
     mocker.patch("gfjproxy.streaming.http_client.stream", return_value=context)
     return response, context
@@ -97,9 +97,9 @@ def test_gemini_stream_skips_thoughts_and_keeps_heartbeat(mocker):
 
 def test_response_helper_does_not_yield_after_generatorexit():
     app = Flask(__name__)
-    response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
 
     with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
         iterator = response.response
         assert next(iterator).startswith(
             'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}'
@@ -114,9 +114,8 @@ def test_response_helper_converts_stream_error_to_safe_sse():
         yield "hello"
         raise RuntimeError("secret upstream details")
 
-    response = ResponseHelper(use_stream=True).add_stream(broken_stream()).build()
-
     with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(broken_stream()).build()
         chunks = list(response.response)
 
     body = "".join(chunks)

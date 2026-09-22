@@ -100,7 +100,7 @@ class ResponseHelper:
         )
 
     def build(self) -> Response:
-        if self._status != 200:
+        if self._status != 200 and len(self._messages) == 1:
             if self._wrap_errors:
                 return Response(
                     response=[json.dumps({"error": self.message.strip()})],

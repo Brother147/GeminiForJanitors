@@ -28,7 +28,7 @@ The critical application bug was a streaming generator that yielded a `[DONE]` f
 - Malformed JSON/request payloads and empty message lists are rejected cleanly.
 - The proxy test provider now validates its `<api_key>@<url>` format.
 - Provider error JSON parsing is hardened where non-JSON upstream responses were able to trigger secondary exceptions.
-- Non-200 `ResponseHelper` results now always remain non-200 even when multiple proxy/error messages are queued.
+- `ResponseHelper` preserves the original non-200 status for a single error, while multiple queued error/proxy messages are intentionally rendered as a normal 200 chat response as required by the existing API contract.
 - Gemini CLI credential parsing is hardened against malformed token data.
 
 ## Provider chain coverage
