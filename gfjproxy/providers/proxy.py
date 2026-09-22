@@ -6,6 +6,7 @@ from .._globals import PROCESS_TIMEOUT, PROXY_NAME, PROXY_URL
 from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -26,9 +27,11 @@ def proxy_generate_content(
     except ValueError:
         return JaiResult(400, "Proxy API key must use the format <api_key>@<url>")
 
+    stream = bool((settings or {}).get("stream", False))
+
     proxy_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -54,13 +57,22 @@ def proxy_generate_content(
             proxy_request["presence_penalty"] = value
 
     headers = {
-        "Accept": "application/json",
+        "Accept": "text/event-stream" if stream else "application/json",
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": PROXY_URL,
         "X-Title": PROXY_NAME,
     }
 
     try:
+        if stream:
+            proxy_result = openai_chat_completion(
+                url,
+                request=proxy_request,
+                headers=headers,
+                timeout=PROCESS_TIMEOUT,
+            )
+            return JaiResult(200, "", stream=proxy_result)
+
         proxy_response = http_client.post(
             url,
             json=proxy_request,

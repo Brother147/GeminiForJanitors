@@ -236,7 +236,6 @@ def test_stream_raises_on_provider_sse_error(mocker):
     context.__exit__.assert_called_once()
 
 
-
 def test_stream_reports_upstream_timeout(mocker):
     _response, context = _stream_context(
         mocker,
@@ -265,3 +264,55 @@ def test_response_helper_reports_empty_provider_stream():
 
     assert "Streaming provider returned no visible content. Please retry." in body
     assert body.endswith("data: [DONE]\n\n")
+
+
+def test_response_helper_starts_downstream_before_upstream_connection():
+    opened = False
+
+    def open_factory():
+        nonlocal opened
+        opened = True
+        return _Context(), _Response()
+
+    class _Context:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+    def iterator_factory(_response):
+        yield "answer"
+
+    stream = _ManagedStream(
+        open_factory, iterator_factory, heartbeat_interval=0.1
+    )
+    app = Flask(__name__)
+
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(stream).build()
+        iterator = iter(response.response)
+        first = next(iterator)
+        assert not opened
+        assert '"content": ""' in first
+        second = next(iterator)
+        assert opened
+        assert '"content": "answer"' in second
+        iterator.close()
+
+
+def test_response_helper_stream_headers_disable_proxy_buffering():
+    app = Flask(__name__)
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(iter(["answer"])).build()
+
+    assert response.content_type.startswith("text/event-stream")
+    assert response.headers["Cache-Control"] == (
+        "no-store, no-cache, no-transform, max-age=0"
+    )
+    assert response.headers["Content-Encoding"] == "identity"
+    assert response.headers["X-Accel-Buffering"] == "no"
