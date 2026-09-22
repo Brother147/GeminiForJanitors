@@ -1,6 +1,6 @@
-import httpx2
 import json
 
+import httpx2
 import pytest
 from flask import Flask
 
