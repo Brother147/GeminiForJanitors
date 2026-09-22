@@ -59,3 +59,15 @@ The `proxy` provider is non-streaming and was hardened separately.
 - Isolated model parsing checks passed for Radeon case preservation and malformed request-type rejection.
 
 The full development test suite and Ruff were not executable in the offline analysis environment because the required third-party packages were unavailable and the package index could not be resolved. This is an environment limitation, not a reported project-test failure.
+## Streaming HTTP error-body fix
+
+When an upstream OpenAI-compatible streaming request returns a non-2xx status,
+`httpx2.Client.stream()` exposes a response whose body has not yet been read.
+Provider error handlers may call `response.json()` or `response.text()` after
+`raise_for_status()`, which raises `ResponseNotRead` unless the body is consumed
+while the stream context is still open. `_open_stream()` now reads the error body
+before re-raising `HTTPStatusError`, preserving the original upstream status and
+allowing all OpenAI-compatible providers to report their real 4xx/5xx errors.
+A regression test covers the read-before-reraise contract, and Radeon has a
+specific streaming 429 regression test.
+

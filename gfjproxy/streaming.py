@@ -90,7 +90,18 @@ def _open_stream(
 
     try:
         response = context.__enter__()
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx2.HTTPStatusError:
+            # Responses returned by ``Client.stream`` are intentionally left
+            # unread until the caller iterates them.  When the HTTP status is
+            # already an error, however, provider error handlers need access
+            # to ``response.json()``/``response.text`` after this function
+            # raises. Read the body while the streaming context is still open
+            # so the original HTTP status can be preserved all the way up.
+            with suppress(Exception):  # pragma: no cover - defensive read
+                response.read()
+            raise
     except BaseException:
         with suppress(Exception):  # pragma: no cover - defensive cleanup only
             context.__exit__(*sys.exc_info())

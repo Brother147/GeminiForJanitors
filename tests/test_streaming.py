@@ -54,6 +54,28 @@ def test_stream_closes_even_before_first_next(mocker):
     context.__exit__.assert_called_once()
 
 
+def test_stream_reads_error_body_before_reraising_status_error(mocker):
+    request = httpx2.Request("POST", "https://example.test")
+    response = mocker.MagicMock()
+    response.raise_for_status.side_effect = httpx2.HTTPStatusError(
+        "429", request=request, response=response
+    )
+    context = mocker.MagicMock()
+    context.__enter__.return_value = response
+    mocker.patch("gfjproxy.streaming.http_client.stream", return_value=context)
+
+    with pytest.raises(httpx2.HTTPStatusError):
+        openai_chat_completion(
+            "https://example.test/v1/chat/completions",
+            request={"model": "test", "stream": True},
+            headers={},
+            timeout=123,
+        )
+
+    response.read.assert_called_once()
+    context.__exit__.assert_called_once()
+
+
 def test_stream_http_status_error_happens_before_return(mocker):
     request = httpx2.Request("POST", "https://example.test")
     response = httpx2.Response(401, request=request)
