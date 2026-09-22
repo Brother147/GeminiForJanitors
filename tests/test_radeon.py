@@ -22,7 +22,7 @@ def test_radeon_provider_sends_openai_compatible_request(mocker):
         },
     }
     post = mocker.patch(
-        "gfjproxy.providers.radeon.http_client.post", return_value=response
+        "gfjproxy.streaming.http_client.post", return_value=response
     )
 
     result = radeon_generate_content(
@@ -71,7 +71,7 @@ def test_radeon_provider_uses_process_timeout(mocker):
     response.raise_for_status.return_value = None
     response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
     post = mocker.patch(
-        "gfjproxy.providers.radeon.http_client.post", return_value=response
+        "gfjproxy.streaming.http_client.post", return_value=response
     )
     mocker.patch("gfjproxy.providers.radeon.PROCESS_TIMEOUT", 123)
 
@@ -84,7 +84,7 @@ def test_radeon_provider_uses_process_timeout(mocker):
 
 def test_radeon_provider_handles_timeout(mocker):
     mocker.patch(
-        "gfjproxy.providers.radeon.http_client.post", side_effect=ReadTimeout("")
+        "gfjproxy.streaming.http_client.post", side_effect=ReadTimeout("")
     )
 
     result = radeon_generate_content(
@@ -110,7 +110,7 @@ def test_radeon_provider_preserves_amd_error_and_redacts_key(mocker):
         request=request,
     )
     error = httpx2.HTTPStatusError("HTTP 429", request=request, response=response)
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", side_effect=error)
+    mocker.patch("gfjproxy.streaming.http_client.post", side_effect=error)
 
     result = radeon_generate_content(
         "test-user", secret, "some-model", [JaiMessage(content="hello")]
@@ -133,7 +133,7 @@ def test_radeon_provider_preserves_http_error_status(mocker, status):
         request=request,
     )
     error = httpx2.HTTPStatusError(f"HTTP {status}", request=request, response=response)
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", side_effect=error)
+    mocker.patch("gfjproxy.streaming.http_client.post", side_effect=error)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -153,7 +153,7 @@ def test_radeon_provider_never_logs_api_key(mocker):
     )
     error = httpx2.HTTPStatusError("HTTP 500", request=request, response=response)
     mock_post = mocker.patch(
-        "gfjproxy.providers.radeon.http_client.post", side_effect=error
+        "gfjproxy.streaming.http_client.post", side_effect=error
     )
     mock_log = mocker.patch("gfjproxy.providers.radeon.xlog")
 
@@ -175,7 +175,7 @@ def test_radeon_provider_handles_detail_message(mocker):
         request=request,
     )
     error = httpx2.HTTPStatusError("HTTP 400", request=request, response=response)
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", side_effect=error)
+    mocker.patch("gfjproxy.streaming.http_client.post", side_effect=error)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -201,7 +201,7 @@ def test_radeon_provider_handles_detail_error(mocker):
         request=request,
     )
     error = httpx2.HTTPStatusError("HTTP 403", request=request, response=response)
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", side_effect=error)
+    mocker.patch("gfjproxy.streaming.http_client.post", side_effect=error)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -216,7 +216,7 @@ def test_radeon_provider_handles_invalid_json(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
     response.json.side_effect = ValueError("not json")
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", return_value=response)
+    mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -238,7 +238,7 @@ def test_radeon_provider_reads_nested_reasoning_tokens(mocker):
             "completion_tokens_details": {"reasoning_tokens": 4},
         },
     }
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", return_value=response)
+    mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -252,7 +252,7 @@ def test_radeon_provider_handles_empty_choices(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
     response.json.return_value = {"choices": []}
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", return_value=response)
+    mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -266,7 +266,7 @@ def test_radeon_provider_handles_invalid_choices_type(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
     response.json.return_value = {"choices": {}}
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", return_value=response)
+    mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]
@@ -280,7 +280,7 @@ def test_radeon_provider_handles_missing_message_content(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
     response.json.return_value = {"choices": [{"message": {}}]}
-    mocker.patch("gfjproxy.providers.radeon.http_client.post", return_value=response)
+    mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = radeon_generate_content(
         "test-user", "rc-secret-key", "some-model", [JaiMessage(content="hello")]

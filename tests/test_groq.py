@@ -14,7 +14,7 @@ def test_groq_provider_accepts_model_from_janitor(mocker):
         },
     }
 
-    post = mocker.patch("gfjproxy.providers.groq.http_client.post", return_value=response)
+    post = mocker.patch("gfjproxy.streaming.http_client.post", return_value=response)
 
     result = groq_generate_content(
         "test-user",
