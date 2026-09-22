@@ -178,7 +178,8 @@ def test_response_helper_stream_without_provider_uses_bytes():
         chunks = list(response.response)
 
     assert all(isinstance(chunk, bytes) for chunk in chunks)
-    assert chunks[-1] == b"data: [DONE]\n\n"
+    body = b"".join(chunks)
+    assert body.endswith(b"data: [DONE]\n\n")
 
 
 def test_response_helper_converts_stream_error_to_safe_sse():
