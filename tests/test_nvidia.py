@@ -1,7 +1,9 @@
 import httpx2
+import pytest
 
 from gfjproxy.models import JaiMessage
 from gfjproxy.providers.nvidia import nvidia_generate_content
+from gfjproxy.streaming import StreamingHTTPError
 
 
 def test_glm_53_adds_clear_thinking_request_option(mocker):
@@ -42,7 +44,5 @@ def test_streaming_nvidia_errors_are_not_reported_as_internal_exception(mocker):
     assert result.status == 200
     stream = result.stream
     assert stream is not None
-    try:
+    with pytest.raises(StreamingHTTPError, match="429"):
         next(stream)
-    except Exception as exc:
-        assert "429" in str(exc)
