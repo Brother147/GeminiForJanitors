@@ -114,7 +114,7 @@ def test_proxy_stream_unlocks_only_after_response_closes(monkeypatch):
     assert storage.unlock_calls == 0
     assert events == []
 
-    response.close()
+    response.response.close()
 
     assert events == ["stream_closed"]
     assert storage.unlock_calls == 1
@@ -142,7 +142,7 @@ def test_proxy_stream_unlocks_after_normal_stream_completion(monkeypatch):
     assert all(isinstance(chunk, bytes) for chunk in chunks)
     assert chunks[-1] == b"data: [DONE]\n\n"
     assert events == ["stream_closed"]
-    assert storage.unlock_calls == 0
+    assert storage.unlock_calls == 1
 
     response.close()
 

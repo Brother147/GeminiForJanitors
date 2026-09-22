@@ -55,8 +55,13 @@ def handle():
 
     user = UserSettings(storage, xuid)
     stream_cleanup_registered = False
+    lock_released = False
 
     def unlock() -> None:
+        nonlocal lock_released
+        if lock_released:
+            return
+        lock_released = True
         try:
             storage.unlock(xuid)
         except Exception as e:  # noqa: BLE001 - cleanup must not mask response
@@ -136,6 +141,15 @@ def handle():
         built_response = response.build()
 
         if jai_req.stream and response.status == 200:
+            stream = iter(built_response.response)
+
+            def stream_with_cleanup():
+                try:
+                    yield from stream
+                finally:
+                    unlock()
+
+            built_response.response = stream_with_cleanup()
             built_response.call_on_close(unlock)
             stream_cleanup_registered = True
 
