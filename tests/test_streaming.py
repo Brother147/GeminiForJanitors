@@ -135,9 +135,43 @@ def test_response_helper_does_not_yield_after_generatorexit():
         response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
         iterator = response.response
         first = next(iterator)
-        assert first.startswith("data: ")
-        assert '"delta": {"content": ""}' in first
+        assert isinstance(first, bytes)
+        assert first.startswith(b"data: ")
+        assert b'"delta": {"content": ""}' in first
         iterator.close()
+
+
+def test_response_helper_stream_wsgi_iterable_yields_only_bytes():
+    app = Flask(__name__)
+    started = {}
+
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
+
+        def start_response(status, headers):
+            started["status"] = status
+            started["headers"] = headers
+
+        app_iter = response({}, start_response)
+        try:
+            chunks = list(app_iter)
+        finally:
+            response.close()
+
+    assert started["status"] == "200 OK"
+    assert chunks
+    assert all(isinstance(chunk, bytes) for chunk in chunks)
+
+
+def test_response_helper_stream_without_provider_uses_bytes():
+    app = Flask(__name__)
+
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_message("hello").build()
+        chunks = list(response.response)
+
+    assert all(isinstance(chunk, bytes) for chunk in chunks)
+    assert chunks[-1] == b"data: [DONE]\n\n"
 
 
 def test_response_helper_converts_stream_error_to_safe_sse():
@@ -151,7 +185,8 @@ def test_response_helper_converts_stream_error_to_safe_sse():
         response = ResponseHelper(use_stream=True).add_stream(broken_stream()).build()
         chunks = list(response.response)
 
-    body = "".join(chunks)
+    assert all(isinstance(chunk, bytes) for chunk in chunks)
+    body = b"".join(chunks).decode("utf-8")
     assert "Streaming provider error. Please retry." in body
     assert "secret upstream details" not in body
     assert body.endswith("data: [DONE]\n\n")
@@ -169,9 +204,11 @@ def test_response_helper_sends_heartbeat_before_slow_stream():
         first = next(iterator)
         second = next(iterator)
 
-    assert first.startswith("data: ")
-    assert '"delta": {"content": ""}' in first
-    assert '"content": "answer"' in second
+    assert isinstance(first, bytes)
+    assert isinstance(second, bytes)
+    assert first.startswith(b"data: ")
+    assert b'"delta": {"content": ""}' in first
+    assert b'"content": "answer"' in second
 
 
 def test_stream_emits_periodic_heartbeat_while_upstream_is_silent():
@@ -260,8 +297,10 @@ def test_response_helper_reports_empty_provider_stream():
 
     with app.test_request_context("/"):
         response = ResponseHelper(use_stream=True).add_stream(iter([])).build()
-        body = "".join(response.response)
+        chunks = list(response.response)
 
+    assert all(isinstance(chunk, bytes) for chunk in chunks)
+    body = b"".join(chunks).decode("utf-8")
     assert "Streaming provider returned no visible content. Please retry." in body
     assert body.endswith("data: [DONE]\n\n")
 
@@ -298,10 +337,12 @@ def test_response_helper_starts_downstream_before_upstream_connection():
         iterator = iter(response.response)
         first = next(iterator)
         assert not opened
-        assert '"content": ""' in first
+        assert isinstance(first, bytes)
+        assert b'"content": ""' in first
         second = next(iterator)
         assert opened
-        assert '"content": "answer"' in second
+        assert isinstance(second, bytes)
+        assert b'"content": "answer"' in second
         iterator.close()
 
 
@@ -316,3 +357,36 @@ def test_response_helper_stream_headers_disable_proxy_buffering():
     )
     assert response.headers["Content-Encoding"] == "identity"
     assert response.headers["X-Accel-Buffering"] == "no"
+
+
+def test_response_helper_accepts_str_and_bytes_stream_chunks_with_utf8():
+    app = Flask(__name__)
+    text = "Привіт, 世界 🌍"
+
+    for chunk in (text, text.encode("utf-8")):
+        with app.test_request_context("/"):
+            response = ResponseHelper(use_stream=True).add_stream(iter([chunk])).build()
+            chunks = list(response.response)
+
+        assert all(isinstance(item, bytes) for item in chunks)
+        assert any(text in item.decode("utf-8") for item in chunks)
+        assert chunks[-1] == b"data: [DONE]\n\n"
+
+
+def test_response_helper_stream_done_is_bytes():
+    app = Flask(__name__)
+
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(iter([])).build()
+        chunks = list(response.response)
+
+    assert chunks[-1] == b"data: [DONE]\n\n"
+
+
+def test_response_helper_non_streaming_response_is_unchanged():
+    response = ResponseHelper().build_message("Привіт")
+
+    assert response.status_code == 200
+    assert len(response.response) == 1
+    assert isinstance(response.response[0], str)
+    assert '"content": "\u041f' in response.response[0]

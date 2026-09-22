@@ -82,7 +82,7 @@ class ResponseHelper:
         return self
 
     @staticmethod
-    def _format_sse_delta(text: str) -> str:
+    def _format_sse_delta(text: str) -> bytes:
         return (
             "data: "
             + json.dumps(
@@ -98,10 +98,10 @@ class ResponseHelper:
                 ensure_ascii=False,
             )
             + "\n\n"
-        )
+        ).encode("utf-8")
 
     @staticmethod
-    def _format_sse_finish() -> str:
+    def _format_sse_finish() -> bytes:
         return (
             "data: "
             + json.dumps(
@@ -117,6 +117,20 @@ class ResponseHelper:
                 ensure_ascii=False,
             )
             + "\n\n"
+        ).encode("utf-8")
+
+    @staticmethod
+    def _format_sse_done() -> bytes:
+        return b"data: [DONE]\n\n"
+
+    @staticmethod
+    def _stream_chunk_text(chunk: str | bytes) -> str:
+        if isinstance(chunk, bytes):
+            return chunk.decode("utf-8")
+        if isinstance(chunk, str):
+            return chunk
+        raise TypeError(
+            f"Streaming chunk must be str or bytes, got {type(chunk).__name__}"
         )
 
     @staticmethod
@@ -166,9 +180,10 @@ class ResponseHelper:
 
                         for chunk in stream:
                             if chunk:
+                                chunk_text = self._stream_chunk_text(chunk)
                                 provider_chunks += 1
-                                provider_chars += len(chunk)
-                                yield self._format_sse_delta(chunk)
+                                provider_chars += len(chunk_text)
+                                yield self._format_sse_delta(chunk_text)
                             else:
                                 yield self._format_sse_delta("")
 
@@ -220,7 +235,7 @@ class ResponseHelper:
 
                     if completed:
                         yield self._format_sse_finish()
-                        yield "data: [DONE]\n\n"
+                        yield self._format_sse_done()
 
                 return Response(
                     response=generate(),
@@ -235,9 +250,11 @@ class ResponseHelper:
                 )
 
             return Response(
-                response=self._format_sse_delta(self.message)
-                + self._format_sse_finish()
-                + "data: [DONE]\n\n",
+                response=[
+                    self._format_sse_delta(self.message)
+                    + self._format_sse_finish()
+                    + self._format_sse_done()
+                ],
                 status=200,
                 content_type="text/event-stream; charset=utf-8",
                 headers={
