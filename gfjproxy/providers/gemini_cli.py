@@ -11,8 +11,8 @@ from ..http_client import http_client
 from ..logging import xlog, xlogtime
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
-from ..streaming import gemini_sse_completion
 from ..storage import storage
+from ..streaming import gemini_sse_completion
 from ..utils import base64url_decode, utcfromtimestamp, utcnow
 from ..xuiduser import XUID
 

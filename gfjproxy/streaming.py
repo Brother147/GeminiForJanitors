@@ -2,7 +2,7 @@ import json
 from collections.abc import Iterator
 from typing import Any
 
-from ..http_client import http_client
+from .http_client import http_client
 
 
 def _decode_line(line: str | bytes) -> str:
