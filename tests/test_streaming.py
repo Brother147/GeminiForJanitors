@@ -1,4 +1,6 @@
 import httpx2
+import json
+
 import pytest
 from flask import Flask
 
@@ -142,21 +144,26 @@ def test_response_helper_does_not_yield_after_generatorexit():
 
 
 def test_response_helper_stream_wsgi_iterable_yields_only_bytes():
-    app = Flask(__name__)
+    from werkzeug.test import EnvironBuilder
+
     started = {}
 
-    with app.test_request_context("/"):
+    with Flask(__name__).test_request_context("/"):
         response = ResponseHelper(use_stream=True).add_stream(iter(["hello"])).build()
 
-        def start_response(status, headers):
-            started["status"] = status
-            started["headers"] = headers
+    builder = EnvironBuilder(path="/", method="GET")
+    environ = builder.get_environ()
 
-        app_iter = response({}, start_response)
-        try:
-            chunks = list(app_iter)
-        finally:
-            response.close()
+    def start_response(status, headers):
+        started["status"] = status
+        started["headers"] = headers
+
+    app_iter = response(environ, start_response)
+    try:
+        chunks = list(app_iter)
+    finally:
+        response.close()
+        builder.close()
 
     assert started["status"] == "200 OK"
     assert chunks
@@ -389,4 +396,8 @@ def test_response_helper_non_streaming_response_is_unchanged():
     assert response.status_code == 200
     assert len(response.response) == 1
     assert isinstance(response.response[0], str)
-    assert '"content": "\u041f' in response.response[0]
+    body = json.loads(response.response[0])
+    assert body["choices"][0]["message"] == {
+        "role": "assistant",
+        "content": "Привіт",
+    }

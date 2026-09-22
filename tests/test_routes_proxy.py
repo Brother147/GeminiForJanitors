@@ -46,9 +46,16 @@ class _TrackingStream:
     def __init__(self, events):
         self.events = events
         self.closed = False
+        self._yielded = False
 
     def __iter__(self):
-        yield "answer"
+        return self
+
+    def __next__(self):
+        if self._yielded:
+            raise StopIteration
+        self._yielded = True
+        return "answer"
 
     def close(self):
         if not self.closed:
