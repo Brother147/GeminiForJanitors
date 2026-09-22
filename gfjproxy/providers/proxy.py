@@ -50,7 +50,8 @@ def proxy_generate_content(
         elif key == "frequency_penalty":
             proxy_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            proxy_request["repetition_penalty"] = value
+            # Preserve JanitorAI's historical setting mapping.
+            proxy_request["presence_penalty"] = value
 
     headers = {
         "Accept": "application/json",

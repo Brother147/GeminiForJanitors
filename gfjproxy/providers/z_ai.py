@@ -53,7 +53,8 @@ def z_ai_generate_content(
         elif key == "frequency_penalty":
             z_ai_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            z_ai_request["repetition_penalty"] = value
+            # Preserve JanitorAI's historical setting mapping.
+            z_ai_request["presence_penalty"] = value
 
     try:
         z_ai_result = openai_chat_completion(

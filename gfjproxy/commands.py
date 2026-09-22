@@ -536,9 +536,9 @@ Makes the selection of words the AI can pick from based on how likely they are.
 
 ## **Repetition Penalty**
 `//advset_repetition_penalty on|off|this`
-Not every provider exposes `repetition_penalty`; providers without a direct equivalent ignore it.
+Not every provider exposes a native `repetition_penalty`. For compatibility with JanitorAI's historical advanced-setting behavior, providers without a native parameter may map this setting to their `presence_penalty` field.
 
-Penalizes repeated tokens. The proxy passes `repetition_penalty` through unchanged only where the provider API supports that parameter; it does not substitute `presence_penalty` because the two settings are not equivalent.
+Penalizes repeated tokens. The exact implementation depends on the provider API.
 
 ## **Frequency Penalty**
 `//advset_frequency_penalty on|off|this`

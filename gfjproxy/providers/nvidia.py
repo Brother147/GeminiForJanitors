@@ -73,7 +73,8 @@ def nvidia_generate_content(
         elif key == "frequency_penalty":
             nvidia_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            nvidia_request["repetition_penalty"] = value
+            # Preserve JanitorAI's historical setting mapping.
+            nvidia_request["presence_penalty"] = value
 
     headers = {
         "Authorization": f"Bearer {api_key}",

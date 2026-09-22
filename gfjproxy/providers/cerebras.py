@@ -51,8 +51,8 @@ def cerebras_generate_content(
         elif key == "frequency_penalty":
             cerebras_request["frequency_penalty"] = value
         elif key == "repetition_penalty":
-            # Cerebras documents presence_penalty, but not repetition_penalty.
-            continue
+            # Preserve JanitorAI's historical setting mapping.
+            cerebras_request["presence_penalty"] = value
 
     try:
         cerebras_result = openai_chat_completion(

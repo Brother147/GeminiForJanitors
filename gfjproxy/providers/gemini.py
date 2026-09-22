@@ -140,9 +140,8 @@ def gemini_generate_content(
         elif key == "frequency_penalty":
             generation_config["frequencyPenalty"] = value
         elif key == "repetition_penalty":
-            # Gemini exposes presencePenalty/frequencyPenalty, not
-            # repetition_penalty. Do not silently change the semantics.
-            continue
+            # Preserve JanitorAI's historical setting mapping.
+            generation_config["presencePenalty"] = value
         elif key == "search" and value:
             gemini_request["tools"] = [{"googleSearch": {}}]
 

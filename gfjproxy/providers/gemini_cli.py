@@ -314,8 +314,8 @@ def gemini_cli_generate_content_ex(
         elif key == "frequency_penalty":
             generation_config["frequencyPenalty"] = value
         elif key == "repetition_penalty":
-            # Gemini generation config does not expose repetition_penalty.
-            continue
+            # Preserve JanitorAI's historical setting mapping.
+            generation_config["presencePenalty"] = value
 
     try:
         # https://github.com/badlogic/pi-mono/blob/83378aad7e74a0e2bb8f37c007a9685fb4609d8a/packages/ai/src/providers/google-gemini-cli.ts#L265
