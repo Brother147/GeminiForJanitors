@@ -125,10 +125,10 @@ def test_radeon_provider_preserves_amd_error_and_redacts_key(mocker):
 
 
 @pytest.mark.parametrize("status", [400, 401, 403, 404, 429, 500, 502, 503])
-def test_radeon_provider_handles_streaming_429_response(mocker):
+def test_radeon_provider_handles_streaming_http_error_response(mocker, status):
     request = httpx2.Request("POST", RADEON_CHAT_COMPLETIONS_URL)
     response = httpx2.Response(
-        429,
+        status,
         json={
             "error": {
                 "code": "rate_limited",
@@ -137,7 +137,7 @@ def test_radeon_provider_handles_streaming_429_response(mocker):
         },
         request=request,
     )
-    error = httpx2.HTTPStatusError("HTTP 429", request=request, response=response)
+    error = httpx2.HTTPStatusError(f"HTTP {status}", request=request, response=response)
 
     context = mocker.MagicMock()
     context.__enter__.return_value = response
@@ -154,13 +154,14 @@ def test_radeon_provider_handles_streaming_429_response(mocker):
         {"stream": True},
     )
 
-    assert result.status == 429
+    assert result.status == status
     assert "rate_limited" in result.error
     assert "too many requests" in result.error
     response.read.assert_called_once()
     context.__exit__.assert_called_once()
 
 
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 429, 500, 502, 503])
 def test_radeon_provider_preserves_http_error_status(mocker, status):
     request = httpx2.Request("POST", RADEON_CHAT_COMPLETIONS_URL)
     response = httpx2.Response(
