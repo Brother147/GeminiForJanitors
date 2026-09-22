@@ -426,7 +426,7 @@ def handle_chat_message(
     else:
         used_noass = False
 
-    settings = {}
+    settings = {"stream": jai_req.stream}
 
     for setting in [
         "temperature",
@@ -500,6 +500,21 @@ def handle_chat_message(
             response.add_proxy_message(result.extras)
 
         return response
+
+    if result.stream is not None:
+        if used_prefill or used_think:
+            result.text = "".join(result.stream)
+        else:
+            stream = result.stream
+            if used_btrick:
+                stream = (chunk.replace("\u2800", " ") for chunk in stream)
+            response.add_stream(stream)
+
+            if result.extras:
+                response.add_proxy_message(result.extras)
+
+            track_stats(f"r.{rtype}.succeeded")
+            return response
 
     if used_btrick:
         result.text = result.text.replace("\u2800", " ")

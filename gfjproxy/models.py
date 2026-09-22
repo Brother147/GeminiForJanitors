@@ -174,6 +174,7 @@ class JaiResult:
     error: str
     extras: str
     metadata: JaiResultMetadata
+    stream: Iterator[str] | None
 
     def __init__(
         self,
@@ -182,6 +183,7 @@ class JaiResult:
         *,
         extras: str = "",
         metadata: JaiResultMetadata | None = None,
+        stream: Iterator[str] | None = None,
     ):
         self.status = status
 
@@ -194,6 +196,7 @@ class JaiResult:
 
         self.extras = extras
         self.metadata = metadata or JaiResultMetadata()
+        self.stream = stream
 
     def __bool__(self) -> bool:
         return self.status == 200

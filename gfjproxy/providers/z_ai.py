@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -23,9 +23,11 @@ def z_ai_generate_content(
 
     User paramater is only used for logging."""
 
+    stream = bool((settings or {}).get("stream", False))
+
     z_ai_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -55,14 +57,15 @@ def z_ai_generate_content(
             z_ai_request["presence_penalty"] = value
 
     try:
-        z_ai_response = http_client.post(
+        z_ai_result = openai_chat_completion(
             "https://api.z.ai/api/paas/v4/chat/completions",
-            json=z_ai_request,
+            request=z_ai_request,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=PROCESS_TIMEOUT,
         )
-        z_ai_response.raise_for_status()
-        z_ai_result = z_ai_response.json()
+        if stream:
+            return JaiResult(200, "", stream=z_ai_result)
+
     except httpx2.TimeoutException:
         track_stats("z_ai.time_out")
         return JaiResult(504, "Gateway Timeout")

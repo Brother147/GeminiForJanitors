@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -21,9 +21,11 @@ def deepseek_generate_content(
 
     User paramater is only used for logging."""
 
+    stream = bool((settings or {}).get("stream", False))
+
     deepseek_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -51,14 +53,15 @@ def deepseek_generate_content(
     }
 
     try:
-        deepseek_response = http_client.post(
+        deepseek_result = openai_chat_completion(
             "https://api.deepseek.com/chat/completions",
-            json=deepseek_request,
+            request=deepseek_request,
             headers=headers,
             timeout=PROCESS_TIMEOUT,
         )
-        deepseek_response.raise_for_status()
-        deepseek_result = deepseek_response.json()
+        if stream:
+            return JaiResult(200, "", stream=deepseek_result)
+
     except httpx2.TimeoutException:
         track_stats("deepseek.time_out")
         return JaiResult(504, "Gateway Timeout")

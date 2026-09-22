@@ -4,10 +4,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -40,9 +40,12 @@ def nvidia_generate_content(
         # For some models, "conversation roles must alternate user/assistant/user/assistant/"
         messages.insert(0, JaiMessage(content=".", role="user"))
 
+
+    stream = bool((settings or {}).get("stream", False))
+
     nvidia_request = {
         "model": model,
-        "stream": True,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -72,51 +75,15 @@ def nvidia_generate_content(
     }
 
     try:
-        chunks: list[str] = []
-
-        with http_client.stream(
-            "POST",
+        nvidia_result = openai_chat_completion(
             "https://integrate.api.nvidia.com/v1/chat/completions",
-            json=nvidia_request,
+            request=nvidia_request,
             headers=headers,
             timeout=PROCESS_TIMEOUT,
-        ) as nvidia_response:
-            nvidia_response.raise_for_status()
+        )
+        if stream:
+            return JaiResult(200, "", stream=nvidia_result)
 
-            for line in nvidia_response.iter_lines():
-                if not line:
-                    continue
-
-                if isinstance(line, bytes):
-                    line = line.decode("utf-8", errors="replace")
-
-                if not line.startswith("data: "):
-                    continue
-
-                data = line[6:]
-
-                if data == "[DONE]":
-                    continue
-
-                try:
-                    chunk = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-
-                for choice in chunk.get("choices", []):
-                    content = choice.get("delta", {}).get("content")
-                    if content:
-                        chunks.append(content)
-
-        nvidia_result = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "".join(chunks),
-                    }
-                }
-            ]
-        }
 
     except httpx2.TimeoutException:
         track_stats("nvidia.time_out")

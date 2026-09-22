@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -23,9 +23,11 @@ def groq_generate_content(
     syntax; this provider does not select or hard-code a model.
     """
 
+    stream = bool((settings or {}).get("stream", False))
+
     groq_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -60,14 +62,15 @@ def groq_generate_content(
     }
 
     try:
-        groq_response = http_client.post(
+        groq_result = openai_chat_completion(
             "https://api.groq.com/openai/v1/chat/completions",
-            json=groq_request,
+            request=groq_request,
             headers=headers,
             timeout=PROCESS_TIMEOUT,
         )
-        groq_response.raise_for_status()
-        groq_result = groq_response.json()
+        if stream:
+            return JaiResult(200, "", stream=groq_result)
+
     except httpx2.TimeoutException:
         track_stats("groq.time_out")
         return JaiResult(504, "Gateway Timeout")

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from itertools import groupby
 
-from flask import Response
+from flask import Response, stream_with_context
 from httpx2 import HTTPError
 
 from .http_client import http_client
@@ -49,6 +49,7 @@ class ResponseHelper:
         self._status = 200
         self._use_stream = use_stream
         self._wrap_errors = wrap_errors
+        self._stream = None
 
     def add_error(self, message, status_code: int):
         self._messages.append(
@@ -75,6 +76,10 @@ class ResponseHelper:
             )
         return self
 
+    def add_stream(self, chunks):
+        self._stream = chunks
+        return self
+
     def build(self) -> Response:
         if self._status != 200 and len(self._messages) == 1:
             if self._wrap_errors:
@@ -90,6 +95,53 @@ class ResponseHelper:
                     content_type="text/plain; charset=utf-8",
                 )
         elif self._use_stream:
+            if self._stream is not None:
+                def generate():
+                    try:
+                        for chunk in self._stream:
+                            if chunk:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "choices": [
+                                                {
+                                                    "index": 0,
+                                                    "delta": {"content": chunk},
+                                                }
+                                            ]
+                                        },
+                                        ensure_ascii=False,
+                                    )
+                                    + "\n\n"
+                                )
+
+                        tail = self.message
+                        if tail:
+                            yield (
+                                "data: "
+                                + json.dumps(
+                                    {
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {"content": tail},
+                                            }
+                                        ]
+                                    },
+                                    ensure_ascii=False,
+                                )
+                                + "\n\n"
+                            )
+                    finally:
+                        yield "data: [DONE]\n\n"
+
+                return Response(
+                    response=stream_with_context(generate()),
+                    status=200,
+                    content_type="text/event-stream; charset=utf-8",
+                )
+
             return Response(
                 response=[
                     json.dumps(

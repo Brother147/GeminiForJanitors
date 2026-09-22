@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -21,9 +21,11 @@ def cerebras_generate_content(
 
     User paramater is only used for logging."""
 
+    stream = bool((settings or {}).get("stream", False))
+
     cerebras_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -51,14 +53,15 @@ def cerebras_generate_content(
             cerebras_request["presence_penalty"] = value
 
     try:
-        cerebras_response = http_client.post(
+        cerebras_result = openai_chat_completion(
             "https://api.cerebras.ai/v1/chat/completions",
-            json=cerebras_request,
+            request=cerebras_request,
             headers={"Authorization": f"Bearer {api_key.removeprefix('cerebras/')}"},
             timeout=PROCESS_TIMEOUT,
         )
-        cerebras_response.raise_for_status()
-        cerebras_result = cerebras_response.json()
+        if stream:
+            return JaiResult(200, "", stream=cerebras_result)
+
     except httpx2.TimeoutException:
         track_stats("cerebras.time_out")
         return JaiResult(504, "Gateway Timeout")

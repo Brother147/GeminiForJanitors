@@ -7,6 +7,7 @@ from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import gemini_sse_completion
 from ..xuiduser import XUID
 
 ################################################################################
@@ -91,6 +92,7 @@ def gemini_generate_content(
     settings parameter."""
 
     generation_config: dict[str, Any] = {}
+    stream = bool((settings or {}).get("stream", False))
 
     gemini_request: dict[str, Any] = {
         "safetySettings": [
@@ -142,14 +144,23 @@ def gemini_generate_content(
             gemini_request["tools"] = [{"googleSearch": {}}]
 
     try:
-        response = http_client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            headers={"x-goog-api-key": api_key},
-            json=gemini_request,
-            timeout=PROCESS_TIMEOUT,
-        )
-        response.raise_for_status()
-        gemini_result = response.json()
+        if stream:
+            gemini_result = gemini_sse_completion(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse",
+                headers={"x-goog-api-key": api_key},
+                request=gemini_request,
+                timeout=PROCESS_TIMEOUT,
+            )
+            return JaiResult(200, "", stream=gemini_result)
+        else:
+            response = http_client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                headers={"x-goog-api-key": api_key},
+                json=gemini_request,
+                timeout=PROCESS_TIMEOUT,
+            )
+            response.raise_for_status()
+            gemini_result = response.json()
     except httpx2.TimeoutException:
         track_stats("g.time_out")
         return JaiResult(504, "Gateway Timeout")

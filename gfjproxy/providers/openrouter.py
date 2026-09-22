@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT, PROXY_NAME, PROXY_URL
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 
@@ -21,9 +21,11 @@ def openrouter_generate_content(
 
     User paramater is only used for logging."""
 
+    stream = bool((settings or {}).get("stream", False))
+
     openrouter_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -54,14 +56,15 @@ def openrouter_generate_content(
     }
 
     try:
-        openrouter_response = http_client.post(
+        openrouter_result = openai_chat_completion(
             "https://openrouter.ai/api/v1/chat/completions",
-            json=openrouter_request,
+            request=openrouter_request,
             headers=headers,
             timeout=PROCESS_TIMEOUT,
         )
-        openrouter_response.raise_for_status()
-        openrouter_result = openrouter_response.json()
+        if stream:
+            return JaiResult(200, "", stream=openrouter_result)
+
     except httpx2.TimeoutException:
         track_stats("openrouter.time_out")
         return JaiResult(504, "Gateway Timeout")

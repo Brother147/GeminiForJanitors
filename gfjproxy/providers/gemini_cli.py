@@ -11,6 +11,7 @@ from ..http_client import http_client
 from ..logging import xlog, xlogtime
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import gemini_sse_completion
 from ..storage import storage
 from ..utils import base64url_decode, utcfromtimestamp, utcnow
 from ..xuiduser import XUID
@@ -287,6 +288,7 @@ def gemini_cli_generate_content_ex(
 
     # Passed and modified by reference
     generation_config = {}
+    stream = bool((settings or {}).get("stream", False))
 
     gemini_cli_request = {
         "project": project_id,
@@ -314,14 +316,23 @@ def gemini_cli_generate_content_ex(
 
     try:
         # https://github.com/badlogic/pi-mono/blob/83378aad7e74a0e2bb8f37c007a9685fb4609d8a/packages/ai/src/providers/google-gemini-cli.ts#L265
-        resp = http_client.post(
-            "https://cloudcode-pa.googleapis.com/v1internal:generateContent",
-            headers=_make_headers(access_token),
-            json=gemini_cli_request,
-            timeout=PROCESS_TIMEOUT,
-        )
-        resp.raise_for_status()
-        resp_json = resp.json()
+        if stream:
+            resp_json = gemini_sse_completion(
+                "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+                headers=_make_headers(access_token),
+                request=gemini_cli_request,
+                timeout=PROCESS_TIMEOUT,
+            )
+            return GenerateContentExResult.from_value({"_stream": resp_json})
+        else:
+            resp = http_client.post(
+                "https://cloudcode-pa.googleapis.com/v1internal:generateContent",
+                headers=_make_headers(access_token),
+                json=gemini_cli_request,
+                timeout=PROCESS_TIMEOUT,
+            )
+            resp.raise_for_status()
+            resp_json = resp.json()
     except httpx2.TimeoutException:
         return GenerateContentExResult.from_error(
             (504, "Google Cloud Code timed out", "")
@@ -432,6 +443,12 @@ def gemini_cli_generate_content(
         error_code, error_message, error_extras = gcexr.error
         track_stats("g_cli.failed")
         return JaiResult(error_code, error_message, extras=error_extras)
+    if bool((settings or {}).get("stream", False)):
+        stream = gcexr.value.get("_stream")
+        if stream is not None:
+            track_stats("g_cli.succeeded")
+            return JaiResult(200, "", stream=stream)
+
     result: dict[str, Any] = gcexr.value.get("response", {})
 
     text = ""

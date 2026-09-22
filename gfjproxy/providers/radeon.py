@@ -3,10 +3,10 @@ from typing import Any
 import httpx2
 
 from .._globals import PROCESS_TIMEOUT
-from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
 from ..statistics import track_stats
+from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
 
 RADEON_CHAT_COMPLETIONS_URL = (
@@ -79,9 +79,11 @@ def radeon_generate_content(
     name after the provider prefix, matching the Groq provider's architecture.
     """
 
+    stream = bool((settings or {}).get("stream", False))
+
     radeon_request = {
         "model": model,
-        "stream": False,
+        "stream": stream,
         "messages": [
             {
                 "content": message.content,
@@ -112,23 +114,15 @@ def radeon_generate_content(
     }
 
     try:
-        radeon_response = http_client.post(
+        radeon_result = openai_chat_completion(
             RADEON_CHAT_COMPLETIONS_URL,
-            json=radeon_request,
+            request=radeon_request,
             headers=headers,
             timeout=PROCESS_TIMEOUT,
         )
-        radeon_response.raise_for_status()
-        try:
-            radeon_result = radeon_response.json()
-        except (ValueError, TypeError):
-            _log(
-                user,
-                f"Invalid AMD response JSON: "
-                f"{_redact_api_key(radeon_response.text, api_key)!r}",
-            )
-            track_stats("radeon.failed.invalid_response")
-            return JaiResult(502, "Invalid response from AMD Radeon Cloud.")
+        if stream:
+            return JaiResult(200, "", stream=radeon_result)
+
     except httpx2.TimeoutException:
         track_stats("radeon.time_out")
         return JaiResult(504, "Gateway Timeout")
