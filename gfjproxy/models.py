@@ -4,7 +4,7 @@ The name of some fields in here may not match with the source they are from."""
 
 from dataclasses import dataclass, field
 from json import loads
-from typing import Iterator
+from collections.abc import Iterator
 
 from .commands import Command, parse_message, strip_message
 from .utils import comma_split
