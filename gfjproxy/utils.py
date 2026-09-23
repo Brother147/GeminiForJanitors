@@ -18,6 +18,8 @@ from httpx2 import HTTPError
 
 from .http_client import http_client
 
+STREAM_PROGRESS_LOG_INTERVAL = 60.0
+
 ################################################################################
 
 
@@ -171,6 +173,9 @@ class ResponseHelper:
                     completed = False
                     provider_chunks = 0
                     provider_chars = 0
+                    next_progress_log = (
+                        time.monotonic() + STREAM_PROGRESS_LOG_INTERVAL
+                    )
 
                     try:
                         # Use an actual SSE data event for heartbeats. Some
@@ -186,6 +191,16 @@ class ResponseHelper:
                                 yield self._format_sse_delta(chunk_text)
                             else:
                                 yield self._format_sse_delta("")
+
+                            now = time.monotonic()
+                            if now >= next_progress_log:
+                                from .logging import xlog
+
+                                xlog(
+                                    None,
+                                    f"Streaming response progress: {provider_chunks} provider chunk(s)",
+                                )
+                                next_progress_log = now + STREAM_PROGRESS_LOG_INTERVAL
 
                         tail = self.message
                         if tail:

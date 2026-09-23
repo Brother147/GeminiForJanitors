@@ -303,3 +303,22 @@ def test_response_helper():
 
 
 ################################################################################
+
+
+def test_response_helper_logs_stream_progress(mocker):
+    """Log the provider chunk count at the configured one-minute interval."""
+    from flask import Flask
+
+    app = Flask(__name__)
+    mock_log = mocker.patch("gfjproxy.logging.xlog")
+    mocker.patch("gfjproxy.utils.time.monotonic", side_effect=[0.0, 60.0])
+
+    def stream():
+        yield "answer"
+
+    with app.test_request_context("/"):
+        response = ResponseHelper(use_stream=True).add_stream(stream()).build()
+        list(response.response)
+
+    messages = [call.args[1] for call in mock_log.call_args_list]
+    assert "Streaming response progress: 1 provider chunk(s)" in messages
