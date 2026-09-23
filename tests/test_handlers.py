@@ -287,145 +287,6 @@ CHAT_MESSAGE_TESTS = [
             ("call_do_show_banner", BANNER_VERSION - 1),
         ],
     },
-    {  # Ensure the //prefill command has an actual effect on the prompt
-        "generate_content_mock": make_mock_response("Bot response."),
-        "expected_result": ("Bot response.", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//prefill this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-        "extra_after_tests": [("look_for_prefill_in_contents", True)],
-    },
-    {  # //think should not alter "plain" response
-        "generate_content_mock": make_mock_response("ABC XYZ"),
-        "expected_result": ("ABC XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think should handle the ideal case and extract only the response
-        "generate_content_mock": make_mock_response(
-            "<think>ABC</think><response>XYZ</response>"
-        ),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think ideal case but out of order
-        "generate_content_mock": make_mock_response(
-            "<response>XYZ</response><think>ABC</think>"
-        ),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think should remove any thinking while leaving everything else intact
-        "generate_content_mock": make_mock_response("123<think>ABC</think>XYZ"),
-        "expected_result": ("123XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think should recover the bot's response if it was correctly wrapped in tags
-        "generate_content_mock": make_mock_response("ABC<response>XYZ</response>DEF"),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think should extract everything after a lone response
-        "generate_content_mock": make_mock_response("ABC<response>XYZ"),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think should remove everything before a lone think
-        "generate_content_mock": make_mock_response("ABC</think>XYZ"),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # //think given a lone think and response in order, recover response
-        "generate_content_mock": make_mock_response("ABC</think><response>XYZ"),
-        "expected_result": ("XYZ", 200),
-        "extra_settings": [
-            (
-                "jai_add_message",
-                JaiMessage.parse({"role": "user", "content": "//think this Message"}),
-            ),
-            ("jai_req_quiet", True),
-            ("jai_req_quiet_commands", True),
-        ],
-    },
-    {  # Handle rejections (case 1)
-        "generate_content_mock": {
-            "promptFeedback": {
-                "blockReason": "SAFETY",
-            },
-        },
-        "expected_result": (
-            "Response blocked/empty due to SAFETY."
-            + "\nTry using one of: `//btrick on`, `//ooctrick on`, `//noass on`, `//prefill on`, `//think on`",
-            502,
-        ),
-    },
-    {  # Handle rejections (case 2)
-        "generate_content_mock": {
-            "candidates": [
-                {
-                    "finishReason": "RECITATION",
-                }
-            ],
-        },
-        "expected_result": (
-            "Response blocked/empty due to RECITATION."
-            + "\nTry using one of: `//btrick on`, `//ooctrick on`, `//noass on`, `//prefill on`, `//think on`",
-            502,
-        ),
-    },
     {  # Ensure user set temperature is honored
         "generate_content_mock": make_mock_response("Bot response."),
         "expected_result": ("Bot response.", 200),
@@ -450,7 +311,6 @@ def test_chat_message(mocker: MockerFixture, params: dict[str, Any]):
     expected_message, expected_status = params["expected_result"]
     user_messages = params.get("user_messages", [JaiMessage()])
     extra_settings = params.get("extra_settings", [])
-    extra_after_tests = params.get("extra_after_tests", [])
 
     mock_post = mocker.patch("gfjproxy.providers.gemini.http_client.post")
     if isinstance(generate_content_mock, Exception):
@@ -491,19 +351,43 @@ def test_chat_message(mocker: MockerFixture, params: dict[str, Any]):
 
     _, kwargs = mock_post.call_args
 
-    for key, value in extra_after_tests:
-        if key == "look_for_prefill_in_contents":
-            for content in kwargs.get("json", {}).get("contents", []):
-                for part in content.get("parts", []):
-                    if "<interaction-config>" in part.get("text", ""):
-                        break
-                else:
-                    continue
-                break
-            else:
-                assert 0, "No prefill found in contents"
-        else:
-            assert 0, f"Invalid extra_after_tests key: {key}"
+
+
+
+def test_generation_settings_are_forwarded_without_commands(mocker: MockerFixture):
+    mock_post = mocker.patch("gfjproxy.providers.gemini.http_client.post")
+    mock_response = mocker.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "candidates": [{"content": {"parts": [{"text": "Bot response"}]}}],
+    }
+    mock_response.raise_for_status.return_value = None
+    mock_post.return_value = mock_response
+
+    user = UserSettings(LocalUserStorage(), XUID("settings", "user"))
+    jai_req = JaiRequest(
+        api_key="AIzaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        models={"google": "gemini-2.5-flash"},
+        messages=[
+            JaiMessage.parse(
+                {"role": "user", "content": "//max_tokens 1234 Message"}
+            )
+        ],
+        temperature=0.8,
+        top_p=0.9,
+        quiet=True,
+        quiet_commands=True,
+    )
+
+    response = handle_chat_message(user, jai_req, ResponseHelper(wrap_errors=False))
+
+    assert response.status == 200
+    _, kwargs = mock_post.call_args
+    generation_config = kwargs["json"]["generationConfig"]
+    assert generation_config["temperature"] == pytest.approx(0.8)
+    assert generation_config["topP"] == pytest.approx(0.9)
+    assert generation_config["maxOutputTokens"] == 1234
+
 
 
 ################################################################################

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from random import randint
 
-from ._globals import BANNER, BANNER_VERSION, PRESETS
+from ._globals import BANNER, BANNER_VERSION
 from .utils import ResponseHelper
 
 ################################################################################
@@ -121,40 +121,16 @@ def command(*, argspec: str = "", **kwargs):
 ################################################################################
 
 
+
 @command()
 def aboutme(args, user, jai_req, response):
-    # U+200B ZERO WIDTH SPACE
+    """Show persistent proxy settings and usage information."""
     response.add_proxy_message(
         f"Your user ID on this proxy is `{user.xuid!r}`.",
         f"You have used this proxy {user.get_rcounter()} time(s).",
         f"You were {user.last_seen_msg()}.",
-        "Your commands are:",
+        "Persistent commands:",
         f"\u200b- //fixturns {'on' if user.use_fixturns else 'off'}",
-        f"\u200b- //btrick {'on' if user.use_btrick else 'off'}",
-        f"\u200b- //noass {'on' if user.use_noass else 'off'}",
-        f"\u200b- //dice_char {'on' if user.use_dice_char else 'off'}",
-        f"\u200b- //nobot {'on' if user.use_nobot else 'off'}",
-        f"\u200b- //ooctrick {'on' if user.use_ooctrick else 'off'}",
-        f"\u200b- //prefill {'on' if user.use_prefill else 'off'}",
-        f"\u200b- //prefill_mode {user.prefill_mode}",
-        f"\u200b- //search {'on' if user.use_search else 'off'}",
-        f"\u200b- //think {'on' if user.use_think else 'off'}",
-        f"\u200b- //think_text {user.think_text}",
-        *(
-            f"\u200b- //advset_{setting} {'on' if user.advsettings.get(setting) else 'off'}"
-            + (
-                f" (value `{getattr(jai_req, setting)}`)"
-                if user.advsettings.get(setting)
-                else ""
-            )
-            for setting in [
-                "temperature",
-                "frequency_penalty",
-                "repetition_penalty",
-                "top_k",
-                "top_p",
-            ]
-        ),
         f"This message is using API key {jai_req.api_key_index + 1} out of {jai_req.api_key_count}.",
     )
     raise CommandExit()
@@ -166,155 +142,12 @@ def banner(args, user, jai_req, response):
     return response.add_proxy_message(BANNER, "***")
 
 
-@command(argspec=r"[A-Za-z]+")
-def preset(args, user, jai_req, response):
-    if args not in PRESETS:
-        raise CommandError(
-            f'"`{args}`" is not a valid preset.'
-            + " Available presets: "
-            + ", ".join(f"`{key}`" for key in PRESETS)
-        )
-
-    jai_req.use_preset = PRESETS[args]
-
-    return response.add_proxy_message(f'Added preset "`{args}`" to this message.')
-
-
-################################################################################
-
-# To add a new "`off|on|this`" command named xyz do the following:
-# - Copy-paste any of the commands in here and write your command text
-# - Add a "use_xyz" field to models.JaiRequest
-# - Add a "use_xyz" getter/setter to xuiduser.UserSettings
-# - Include your command's setting to //aboutme output
-# - Include your command's documentation to appropiate //help topics
-# - Implement your commands' additional logic inside handlers.handle_chat_message
-
-
 @command(argspec=r"off|on|this", setting="fixturns")
 def fixturns(args, user, jai_req, response):
     if jai_req.quiet_commands:
         return response
     return response.add_proxy_message(
-        f"Fix requests turns {'enabled' if jai_req.use_fixturns else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="btrick")
-def btrick(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Braille Trick {'enabled' if jai_req.use_btrick else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="noass")
-def noass(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"NoAss {'enabled' if jai_req.use_noass else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="nobot")
-def nobot(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Bot description {'omitted' if jai_req.use_nobot else 'kept'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="ooctrick")
-def ooctrick(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"OOC Trick {'enabled' if jai_req.use_ooctrick else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="prefill")
-def prefill(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Prefill {'enabled' if jai_req.use_prefill else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"0|1|2|3")
-def prefill_mode(args, user, jai_req, response):
-    mode = int(args)
-    user.prefill_mode = mode
-    if jai_req.quiet_commands:
-        return response
-
-    if mode == 0:
-        mode_name = "classic"
-    else:
-        mode_names = []
-        if mode in (1, 3):
-            mode_names.append("interaction config")
-        if mode in (2, 3):
-            mode_names.append("code starter")
-        mode_name = " + ".join(mode_names)
-
-    return response.add_proxy_message(f"Prefill mode set to {args} ({mode_name})")
-
-
-@command(argspec=r"off|on|this", setting="search")
-def search(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Google Search {'enabled' if jai_req.use_search else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"off|on|this", setting="think")
-def think(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Thinking {'enabled' if jai_req.use_think else 'disabled'}"
-        + (" (for this message only)." if args == "this" else ".")
-    )
-
-
-@command(argspec=r"keep|remove")
-def think_text(args, user, jai_req, response):
-    user.think_text = args
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Thinking text will be {'kept' if args == 'keep' else 'removed'}."
-        + (
-            " Make sure to have `//think on` otherwise no thinking will show up."
-            if args == "keep"
-            else ""
-        )
-    )
-
-
-################################################################################
-
-
-@command(argspec=r"off|on|this", setting="dice_char")
-def dice_char(args, user, jai_req, response):
-    if jai_req.quiet_commands:
-        return response
-    return response.add_proxy_message(
-        f"Character dice {'enabled' if jai_req.use_dice_char else 'disabled'}"
+        f"Fix request turns {'enabled' if jai_req.use_fixturns else 'disabled'}"
         + (" (for this message only)." if args == "this" else ".")
     )
 
@@ -328,7 +161,7 @@ def dice_roll(args, user, jai_req, response):
     )
     if not match:
         return response.add_proxy_message(
-            f"Invalid dice syntax `{args}`\nUse the `//dice_help` command for more info."
+            f"Invalid dice syntax `{args}`\nUse the `//help dice` command for more info."
         )
 
     count = min(max(int(match.group(1) or "1", base=10), 1), 100)
@@ -359,63 +192,10 @@ def dice_roll(args, user, jai_req, response):
     return response.add_proxy_message(result_str)
 
 
-################################################################################
-
-
-def _advset(setting, args, user, jai_req, response):
-    if args == "this":
-        jai_req.advsettings[setting] = True
-    elif args == "on":
-        jai_req.advsettings[setting] = True
-        user.advsettings[setting] = True
-    else:  # "off"
-        jai_req.advsettings[setting] = False
-        user.advsettings[setting] = False
-
-    if jai_req.quiet_commands:
-        return response
-
-    value = getattr(jai_req, setting)
-
-    response.add_proxy_message(
-        f"Advanced setting {setting} {'enabled' if args != 'off' else 'disabled'}"
-        + (" (for this message only)" if args == "this" else "")
-        + f" with value `{value}`."
-        + (
-            "\nMake sure to set it to nonzero in JanitorAI's Generation Settings."
-            if not value
-            else ""
-        )
-    )
-
-    if not value:
-        raise CommandExit()
-    return response
-
-
-@command(argspec=r"off|on|this")
-def advset_temperature(args, user, jai_req, response):
-    return _advset("temperature", args, user, jai_req, response)
-
-
-@command(argspec=r"off|on|this")
-def advset_frequency_penalty(args, user, jai_req, response):
-    return _advset("frequency_penalty", args, user, jai_req, response)
-
-
-@command(argspec=r"off|on|this")
-def advset_repetition_penalty(args, user, jai_req, response):
-    return _advset("repetition_penalty", args, user, jai_req, response)
-
-
-@command(argspec=r"off|on|this")
-def advset_top_k(args, user, jai_req, response):
-    return _advset("top_k", args, user, jai_req, response)
-
-
-@command(argspec=r"off|on|this")
-def advset_top_p(args, user, jai_req, response):
-    return _advset("top_p", args, user, jai_req, response)
+@command(argspec=r".+")
+def roll(args, user, jai_req, response):
+    """Short alias for //dice_roll."""
+    return dice_roll(args, user, jai_req, response)
 
 
 ################################################################################
@@ -423,162 +203,56 @@ def advset_top_p(args, user, jai_req, response):
 
 HELP_COMMANDS = """***
 You can include one or more commands in your messages, separated by spaces.
-You can turn on some commands and they will apply across all messages in all chats.
-Some commands can be called with `this` to make them only apply to the next message.
-Preset commands need to be called every time you want to use them.
+Persistent settings are intentionally limited to commands that have a useful effect on normal RP.
 
 - `//aboutme`
-  Shows you info about your proxy usage and what commands you have turned on or off.
+  Shows your proxy user ID, usage counter, and persistent command settings.
 
 - `//banner`
-  Shows you the banner, regardless of whether you have seen it before or if you use the `/quiet/` URL.
+  Shows the current proxy banner again.
 
-- `//help advsettings|commands|dice|multikey|providers`
-  Shows you info about specific topics or proxy features.
+- `//help commands|dice|multikey|providers`
+  Shows information about specific proxy features.
 
 - `//fixturns on|off|this`
-  Adds an empty user message to the end of the conversation, fixing the issues with models that can't take prefills right away.
-
-- `//noass on|off|this`
-  Coalesces the entire chat history into a single message, hopefully bypassing content filters. May break some models.
-
-- `//btrick on|off|this`
-  Uses U+2800 Braille Pattern Blank when talking to the AI to help bypass content filters.
-
-- `//ooctrick on|off|this`
-  Inserts two fake OOC messages into the chat when generating, hopefully fooling the content filters and bypassing them.
-
-- `//prefill on|off|this`
-  Adds a prefill/jailbreak to the chat. This could help prevent errors, but it is not guaranteed.
-
-- `//prefill_mode 0|1|2|3`
-  Selects what kind of prefill/jailbreak to use: classic (0), interaction config (1), starter (2), combined (3).
-
-- `//search on|off|this`
-  Enables the use of Google Search, allowing the model to look up any information relevant to the chat.
-
-- `//think on|off|this`
-  Tricks Gemini into doing its thinking inside the response to bypass content filters. *Note:* this might cause ᐸthinkᐳ/ᐸresponseᐳ to leak into the bot's messages.
-
-- `//think_text keep|remove`
-  Configures the proxy to either include the model's thinking in the response or remove it entirely.
-
-- `//nobot on|off|this`
-  Removes the bot's description from the chat, in case it contains ToS-breaking content. *Note:* use this only as a last resort. This will negatively impact your chat.
-
-- `//preset gigakostyl`
-  Adds a simple writing guideline for NSFW roleplay, plus "X-ray views" to sex scenes.
-
-- `//preset minipopka`
-  Adds a longer writing guideline to enhance narration and NSFW roleplay.
+  Adds an empty user message when the request would otherwise end on an assistant turn.
 
 - `//dice_roll [count]d(faces)[(p|m)(extra)]`
-- `//dice_char on|off|this`
-  Rolls dices using proxy-provided random numbers. See `//help dice` for more info.
+  Rolls real random dice and inserts the result into the request.
 
-- `//advset_temperature on|off|this`
-- `//advset_frequency_penalty on|off|this`
-- `//advset_repetition_penalty on|off|this`
-- `//advset_top_k on|off|this`
-- `//advset_top_p on|off|this`
-  Controls whether to apply advanced settings to the model. See `//help advsettings` for more info.
+- `//roll [count]d(faces)[(p|m)(extra)]`
+  Short alias for `//dice_roll`.
 """
 
 
 HELP_ADVSETTINGS = """***
-# **Advanced Settings**
+# **Generation Settings**
 
-The proxy supports passing advanced settings to providers to tweak how the AI writes.
+The proxy accepts JanitorAI generation settings and forwards supported values directly to providers.
 
-You can configure these in JanitorAI's Generation Settings.
-They must be set to a number greater than zero in JanitorAI to apply.
-Most of these also require a specific command to be enabled in the proxy.
+- **Temperature** controls response randomness.
+- **Top P** and **Top K** control token sampling where supported.
+- **Frequency Penalty** and **Repetition Penalty** reduce repeated wording where supported.
+- **Max Tokens** is controlled by JanitorAI generation settings and is forwarded directly when supported.
 
-## **Temperature**
-`//advset_temperature on|off|this`
-
-Controls how predictable the AI's word choises are.
-- Low temperature makes the AI prefer more common or likely words.
-- High temperature makes the AI to chose words more freely or randomly.
-
-Setting temperature to zero makes the AI to always try to the exact same response.
-
-## **Max Tokens**
-The proxy always ignores this setting.
-
-Limits how much the AI can write, however it cuts the thinking process too early
-and usually leads to error and degraded responses, this it is ignored.
-
-## **Context Size**
-
-Controls how much of the chat history JanitorAI sends to the proxy.
-- Low context size makes the AI forgetful and unware of older messages.
-- High context size provides the AI with much more of the chat history.
-
-Setting context size too high can cause Tokens Per Minute errors.
-
-## **Top K**
-`//advset_top_k on|off|this`
-Not supported by `z_ai` models.
-
-Sets an exact limit on how many words the AI can pick from.
-- Low top k makes the AI pick from a small list of common words.
-- High top k makes the AI pick from a larger list of words, common and uncommon.
-
-Setting top k too hich can make the AI to accidentally use gibberish or random symbols.
-
-## **Top P**
-`//advset_top_p on|off|this`
-
-Makes the selection of words the AI can pick from based on how likely they are.
-- Low top p makes the AI pick only from the most common words.
-- High top p makes the pick from a larger selection of words.
-
-## **Repetition Penalty**
-`//advset_repetition_penalty on|off|this`
-Not every provider exposes a native `repetition_penalty`. For compatibility with JanitorAI's historical advanced-setting behavior, providers without a native parameter may map this setting to their `presence_penalty` field.
-
-Penalizes repeated tokens. The exact implementation depends on the provider API.
-
-## **Frequency Penalty**
-`//advset_frequency_penalty on|off|this`
-Not supported by `z_ai` and some `google` models.
-
-Prevents the AI from overusing specific words it has already generated.
+Provider support varies, so unsupported settings may be ignored or rejected by the upstream API.
 """
 
 
 HELP_DICE = """***
 # **Dice Commands**
 
-Language models can't produce random numbers without bias.
-The proxy can provide the model with random numbers, allowing for a more authentic experience.
-Use the `//dice_roll` command to roll any dice you specify, let the proxy generate the outcome and let the model interpret it for you.
+The proxy can generate random numbers itself, so the model does not have to invent them.
 
-## **Dice Specification**
+Examples:
+- `//dice_roll d6`
+- `//roll 3d20`
+- `//dice_roll 2d6p3`
+- `//dice_roll d20m2`
 
-To make a `//dice_roll` you first need to describe which kind of dice you want to roll.
-Examples: use `//dice_roll d6` to roll one six-faced dice, use `//dice_roll 3d20` to roll three twenty-faced dice.
-The syntax is `//dice_roll [count]d(faces)[(p|m)(extra)]`. Stuff inside (parens) is mandatory, stuff inside [brackets] is optional.
-You must specify how many `faces` the dice you want to roll has. Any number greater than 1 works. Examples: `d6`, `d20`, `d100`.
-You can add a `count` to roll the given dice multiple times. Any number greater than 1 works. Examples: `2d10`, `8d15`.
-You can add or substract a fixed amount, the `extra`, to the end result. You must specify whether to add (`p` for "plus") or substract (`m` for "minus"). Any number works. Examples: `d20p5`, `d3m2`.
-You can use all these features at the same time. Example: `//dice_roll 5d20p10` means "roll a twenty-faced dice five times and then add 10".
+Syntax: `[count]d(faces)[p|m(extra)]`.
 
-## **The `//dice_roll` and `//dice_char` commands**
-
-When you use the `//dice_roll` command, you and the model get to see the result. This command is for your use.
-When you enable the `//dice_char` command, the proxy will roll a dice on every message, hidden from you, in behalf of the character you are role-playing with.
-The `//dice_char` command is for passively providing randomness to the environment and the character.
-You can use the `//dice_roll` command multiple times in a single message for multiple separate dice rolls. The `//dice_char` command only rolls one dice per message.
-
-## **Summary**
-
-- `//dice_roll [count]d(faces)[(p|m)(extra)]`
-  Rolls a dice for you.
-
-- `//dice_char on|off|this`
-  Rolls a hidden dice for the character on every message.
+The result is inserted into the request as a system-style note for the model and is also shown to you.
 """
 
 
@@ -606,7 +280,6 @@ Your commands are stored in your first key. \
 If you change the first key on your proxy settings, \
 then you will have to send your commands again.
 """
-
 
 HELP_PROVIDERS = """***
 # **Model Providers**
@@ -678,9 +351,7 @@ To use any Z.AI model, you must add `z_ai/` at the start.
 You must add `z_ai/` at the start of any Z.AI API key.
 """
 
-
 HELP = {
-    "advsettings": HELP_ADVSETTINGS,
     "commands": HELP_COMMANDS,
     "dice": HELP_DICE,
     "multikey": HELP_MULTIKEY,
@@ -703,7 +374,6 @@ def help(args, user, jai_req, response):
 
 
 ################################################################################
-
 
 def parse_message(message: str) -> tuple[list[Command], str]:
     """Parse an message into a list of commands and the message's content."""

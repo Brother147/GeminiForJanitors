@@ -75,17 +75,6 @@ class JaiRequest:
 
     # Commands
     use_fixturns: bool = False
-    use_btrick: bool = False
-    use_dice_char: bool = False
-    use_noass: bool = False
-    use_nobot: bool = False
-    use_ooctrick: bool = False
-    use_prefill: bool = False
-    use_preset: str | None = None
-    use_search: bool = False
-    use_think: bool = False
-
-    advsettings: dict[str, bool] = field(default_factory=dict)
 
     def append_message(self, role: str, content: str):
         self.messages.append(

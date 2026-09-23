@@ -126,12 +126,9 @@ def z_ai_generate_content(
         )
 
     if not text and isinstance(message, dict):
-        # The `//think on` jailbreak seems to make Z.AI models spill
-        # the response into "reasoning_content" instead of "content".
-        # Hopefully handlers.py can handle this down the line.
+        # Some Z.AI responses place generated text in reasoning_content instead
+        # of content. Keep it as a fallback so the response is not lost.
         text = message.get("reasoning_content", "")
-        if "<response>" not in text and "</response>" not in text:
-            extras = "Z.AI returned anomalous response. The `//think` command might cause this."
 
     if not text:
         # Rejection?

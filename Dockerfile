@@ -7,7 +7,6 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev
 
 COPY gfjproxy ./gfjproxy
-COPY presets ./presets
 
 ARG GFJPROXY_BRANCH
 ARG GFJPROXY_VERSION

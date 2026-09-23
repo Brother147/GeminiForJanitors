@@ -3,7 +3,6 @@
 import subprocess
 from datetime import UTC, datetime, timedelta
 from os import environ as _env
-from os import scandir as _scandir
 from os.path import dirname as _dirname
 
 ################################################################################
@@ -98,12 +97,6 @@ else:
 
 CLOUDFLARED = _env.get("GFJPROXY_CLOUDFLARED")
 
-PRESETS = {}
-for entry in _scandir("presets"):
-    if entry.is_file():
-        with open(f"presets/{entry.name}", encoding="utf-8") as preset:
-            PRESETS[entry.name.split(".")[0]] = preset.read()
-
 PROXY_AUTHORS = [
     "@undefinedundefined (@undefined_anon on Discord, vu5eruz on GitHub)",
 ]
@@ -154,7 +147,7 @@ PROCESS_TIMEOUT: int = max(
 
 ################################################################################
 
-BANNER_VERSION = 35
+BANNER_VERSION = 36
 
 BANNER = rf"""***
 # **{PROXY_NAME}** ({PROXY_VERSION} {PROXY_BRANCH})
@@ -199,6 +192,14 @@ Pull requests are welcome at `https://github.com/vu5eruz/GeminiForJanitors` for 
 ● The proxy has had an internal rework and the Gemini provider code was changed. Please report any issues to the Gemini Proxy Guide.
 
 ● New command `//fixturns` is now available to help deal with "`requests ending with a model turn are not supported`" errors!
+
+## September 23, 2026
+
+● Removed legacy jailbreak/filter workarounds and per-command advanced-setting switches.
+
+● Generation settings supplied by JanitorAI are now forwarded directly when present.
+
+● Added `//roll` as a short alias for the existing dice command.
 
 """
 
