@@ -112,3 +112,10 @@ Validation in this environment: Python byte-compilation, notebook JSON parsing, 
 Sources checked on November 24, 2026: JanitorAI community reports for the new Thinking selector (seven proxy levels and OpenAI-compatible/OpenRouter modes); OpenRouter Chat Completions reference for supported reasoning values; DeepSeek Thinking Mode and Chat Completions references for `thinking`/`reasoning_effort`; Google Cloud Gemini thinking documentation for model-specific `thinkingLevel` and `thinkingBudget` constraints. The full pytest suite is still blocked in this sandbox because Flask and other project dependencies are not installed and the package index is unreachable; compilation and static checks are performed on this revised archive.
 
 Final validation for the thinking-menu revision (November 24, 2026): Python `compileall`, AST parsing of all 52 Python files, notebook JSON parsing, TOML/YAML parsing, and `uv lock --check` pass. Twenty-two isolated assertions passed, covering request parsing, unknown-field retention, tool/multimodal message round-trips, OpenRouter and DeepSeek reasoning conversion, Gemini model-specific levels, `extra_body`, and image-part conversion. Full pytest collection still stops before tests run because Flask is unavailable in this environment; Ruff is also not installed.
+
+
+## GitHub Actions correction (2026-11-24)
+
+- Fixed `astral-sh/setup-uv@v10`: this action intentionally publishes immutable full-version tags from v8 onward, not a floating major tag.
+- Pinned the verified v10.3.3 commit `68559e99cc807c1eb7e9238fd43a15bba460eec2`.
+- The workflow still installs uv `0.13.9` explicitly; only the action reference changed.
