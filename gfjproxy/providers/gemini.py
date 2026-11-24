@@ -6,6 +6,11 @@ from .._globals import PROCESS_TIMEOUT
 from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import (
+    gemini_parts,
+    gemini_thinking_config,
+    merge_extra_body,
+)
 from ..statistics import track_stats
 from ..streaming import gemini_sse_completion
 from ..utils import safe_response_json
@@ -122,17 +127,26 @@ def gemini_generate_content(
         "contents": [
             {
                 "role": "user" if msg.role == "user" else "model",
-                "parts": [{"text": msg.content}],
+                "parts": gemini_parts(msg.content),
             }
             for msg in messages
         ],
     }
 
-    for key, value in (settings or {}).items():
-        if key == "temperature":
+    generation_settings = merge_extra_body(settings)
+    thinking_config = gemini_thinking_config(model, generation_settings)
+    if thinking_config is not None:
+        generation_config["thinkingConfig"] = thinking_config
+
+    for key, value in generation_settings.items():
+        if key in {"thinkingConfig", "thinking_config"} and isinstance(value, dict):
+            generation_config["thinkingConfig"] = value
+        elif key == "temperature":
             generation_config["temperature"] = value
-        elif key == "max_tokens":
+        elif key in {"max_tokens", "max_completion_tokens", "max_output_tokens"}:
             generation_config["maxOutputTokens"] = value
+        elif key in {"thinkingBudget", "thinking_budget"}:
+            generation_config["thinkingBudget"] = value
         elif key == "top_k":
             generation_config["topK"] = value
         elif key == "top_p":

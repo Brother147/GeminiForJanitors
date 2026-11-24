@@ -3,6 +3,9 @@ name: Python CI
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,10 +18,10 @@ jobs:
         with:
           python-version-file: ".python-version"
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
-          version: "0.12.1"
+          version: "0.13.9"
 
       - uses: supercharge/redis-github-action@v2
         with:

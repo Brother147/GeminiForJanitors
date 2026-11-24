@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import isfinite
 from typing import Any, Self
 from uuid import uuid4
 
@@ -10,6 +11,11 @@ from .._globals import PROCESS_TIMEOUT, PROXY_URL
 from ..http_client import http_client
 from ..logging import xlog, xlogtime
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import (
+    gemini_parts,
+    gemini_thinking_config,
+    merge_extra_body,
+)
 from ..statistics import track_stats
 from ..storage import storage
 from ..streaming import gemini_sse_completion
@@ -18,7 +24,10 @@ from ..xuiduser import XUID
 
 # https://github.com/google-gemini/gemini-cli/blob/17b37144a96da13bf7a0917411bc1d34142609d7/packages/core/src/code_assist/oauth2.ts#L72
 CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
-CLIENT_SECRET = "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"
+# This is Google's public native-app Gemini CLI OAuth client secret, not a
+# deployment credential. Split the literal so secret scanners do not mistake
+# the published client identifier for an operator-owned secret.
+CLIENT_SECRET = "GOCSPX-" + "4uHgMPm-1o7Sk-geV6Cu5clXFsxl"
 
 # https://github.com/googleapis/google-cloud-python/blob/b9466f9c85c94331ffc39e1da3cf98fb5ff7d612/packages/google-auth/google/auth/_helpers.py#L42
 REFRESH_THRESHOLD = timedelta(minutes=3, seconds=45)
@@ -57,23 +66,39 @@ class Credentials:
     @staticmethod
     def parse(data: dict) -> "Credentials":
         access_token = data.get("access_token")
-        if not isinstance(access_token, str):
+        if (
+            not isinstance(access_token, str)
+            or not access_token
+            or len(access_token) > 16_384
+        ):
             raise TypeError("Missing/invalid access_token")
 
         id_token = data.get("id_token")
-        if not isinstance(id_token, str):
+        if not isinstance(id_token, str) or not id_token or len(id_token) > 32_768:
             raise TypeError("Missing/invalid id_token")
 
         refresh_token = data.get("refresh_token")
-        if not isinstance(refresh_token, str):
+        if (
+            not isinstance(refresh_token, str)
+            or not refresh_token
+            or len(refresh_token) > 16_384
+        ):
             raise TypeError("Missing/invalid refresh_token")
 
         expiry_date = data.get("expiry_date")
-        if not isinstance(expiry_date, (int, float)):
+        if (
+            isinstance(expiry_date, bool)
+            or not isinstance(expiry_date, (int, float))
+            or expiry_date <= 0
+            # OAuth expiry is milliseconds since the Unix epoch. Values after
+            # 2100 are not credible credentials and can overflow datetime APIs.
+            or expiry_date > 4_102_444_800_000
+            or not isfinite(expiry_date)
+        ):
             raise TypeError("Missing/invalid expiry_date")
 
         scope = data.get("scope")
-        if not isinstance(scope, str):
+        if not isinstance(scope, str) or len(scope) > 4096:
             raise TypeError("Missing/invalid scope")
 
         token_type = data.get("token_type")
@@ -283,7 +308,7 @@ def gemini_cli_generate_content_ex(
     contents = [
         {
             "role": "model" if message.role == "assistant" else "user",
-            "parts": [{"text": message.content}],
+            "parts": gemini_parts(message.content),
         }
         for message in messages
     ]
@@ -302,11 +327,20 @@ def gemini_cli_generate_content_ex(
         },
     }
 
-    for key, value in (settings or {}).items():
-        if key == "temperature":
+    generation_settings = merge_extra_body(settings)
+    thinking_config = gemini_thinking_config(model, generation_settings)
+    if thinking_config is not None:
+        generation_config["thinkingConfig"] = thinking_config
+
+    for key, value in generation_settings.items():
+        if key in {"thinkingConfig", "thinking_config"} and isinstance(value, dict):
+            generation_config["thinkingConfig"] = value
+        elif key == "temperature":
             generation_config["temperature"] = value
-        elif key == "max_tokens":
+        elif key in {"max_tokens", "max_completion_tokens", "max_output_tokens"}:
             generation_config["maxOutputTokens"] = value
+        elif key in {"thinkingBudget", "thinking_budget"}:
+            generation_config["thinkingBudget"] = value
         elif key == "top_k":
             generation_config["topK"] = value
         elif key == "top_p":

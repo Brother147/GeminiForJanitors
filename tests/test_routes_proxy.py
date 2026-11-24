@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 import gfjproxy.routes.proxy as proxy_module
 
 
@@ -145,5 +147,33 @@ def test_proxy_stream_unlocks_after_normal_stream_completion(monkeypatch):
     assert storage.unlock_calls == 1
 
     response.close()
+
+    assert storage.unlock_calls == 1
+
+
+def test_proxy_unlocks_when_user_settings_initialization_fails(monkeypatch):
+    from flask import Flask
+
+    app = Flask(__name__)
+    storage = _FakeStorage()
+
+    def broken_user_settings(_storage, _xuid):
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr(proxy_module, "storage", storage)
+    monkeypatch.setattr(proxy_module, "UserSettings", broken_user_settings)
+    monkeypatch.setattr(proxy_module, "xuid_secret", "test-secret")
+
+    with app.test_request_context(
+        "/chat/completions",
+        method="POST",
+        json={
+            "messages": [{"content": "hello", "role": "user"}],
+            "model": "gemini-2.5-flash",
+        },
+        headers={"Authorization": "Bearer test-key"},
+    ):
+        with pytest.raises(RuntimeError, match="storage unavailable"):
+            proxy_module.handle()
 
     assert storage.unlock_calls == 1

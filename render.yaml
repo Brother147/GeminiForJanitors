@@ -28,7 +28,7 @@ services:
       - key: PORT
         value: 5000
       - key: UV_VERSION
-        value: "0.12.1"
+        value: "0.13.9"
 
   # Key Value storage for gfjproxy user settings
   - type: keyvalue

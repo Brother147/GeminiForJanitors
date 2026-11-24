@@ -6,6 +6,7 @@ from ._globals import (
     BANDWIDTH_WARNING,
     CLOUDFLARED,
     COOLDOWN,
+    MAX_REQUEST_BYTES,
     PRODUCTION,
     PROXY_BRANCH,
     PROXY_NAME,
@@ -23,9 +24,12 @@ if PRODUCTION:
 ################################################################################
 
 
+import os
+
 from colorama import just_fix_windows_console
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from .logging import hijack_loggers, xlog
 from .storage import storage
@@ -52,8 +56,8 @@ def create_app():
     if PRODUCTION:
         if not isinstance(storage, RedisUserStorage):
             raise RuntimeError("Production user storage must be Redis")
-        if not XUID_SECRET:
-            raise RuntimeError("Production must have set XUID secret")
+        if not XUID_SECRET or len(XUID_SECRET.encode("utf-8")) < 32:
+            raise RuntimeError("Production XUID secret must be at least 32 UTF-8 bytes")
 
     if CLOUDFLARED is not None:
         run_cloudflared(CLOUDFLARED)
@@ -75,7 +79,39 @@ def create_app():
     # Application initialization
 
     app = Flask(__name__)
-    CORS(app)
+    app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+    # JanitorAI's web frontend is the expected browser client. Operators can
+    # extend this list for a trusted app/webview origin or use '*' deliberately.
+    cors_origins = [
+        origin.strip()
+        for origin in os.environ.get(
+            "GFJPROXY_CORS_ORIGINS",
+            "https://janitorai.com,https://www.janitorai.com",
+        ).split(",")
+        if origin.strip()
+    ]
+    CORS(
+        app,
+        origins=cors_origins,
+        methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        supports_credentials=False,
+        max_age=600,
+    )
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        if request.path.startswith("/keyring"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_request_too_large(_error):
+        return {"error": "Request body is too large."}, 413
 
     from .routes.keyring import keyring
     from .routes.proxy import proxy

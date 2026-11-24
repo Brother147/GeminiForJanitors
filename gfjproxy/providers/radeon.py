@@ -5,6 +5,7 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
@@ -84,13 +85,7 @@ def radeon_generate_content(
     radeon_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     for key, value in (settings or {}).items():
@@ -107,6 +102,8 @@ def radeon_generate_content(
             # AMD Radeon Cloud does not document repetition_penalty.
             # Do not translate it to presence_penalty: they are not equivalent.
             continue
+
+    apply_openai_optional_params(radeon_request, settings)
 
     headers = {
         "Authorization": f"Bearer {api_key.removeprefix('radeon/').strip()}",
@@ -194,7 +191,7 @@ def radeon_generate_content(
             if not isinstance(message, dict):
                 text = ""
             else:
-                text = str(message.get("content") or "")
+                text = extract_text_content(message.get("content"))
 
     if not text:
         _log(

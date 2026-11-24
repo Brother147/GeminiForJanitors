@@ -2,6 +2,7 @@ from traceback import print_exception
 
 from flask import Blueprint, abort, request
 
+from .._globals import MAX_API_KEYS
 from ..cooldown import get_cooldown
 from ..handlers import handle_chat_message, handle_proxy_test
 from ..logging import xlog, xlogtime
@@ -16,8 +17,12 @@ proxy = Blueprint("proxy", __name__)
 
 @proxy.route("/", methods=["POST"])
 @proxy.route("/chat/completions", methods=["POST"])
+@proxy.route("/v1/", methods=["POST"])
+@proxy.route("/v1/chat/completions", methods=["POST"])
 @proxy.route("/quiet/", methods=["POST"])
 @proxy.route("/quiet/chat/completions", methods=["POST"])
+@proxy.route("/quiet/v1/chat/completions", methods=["POST"])
+@proxy.route("/v1/quiet/chat/completions", methods=["POST"])
 def handle():
     assert storage is not None  # Make type checkers happy
 
@@ -41,9 +46,21 @@ def handle():
     if len(request_auth) != 2 or request_auth[0].lower() != "bearer":
         return response.build_error("Unauthorized. API key required.", 401)
 
-    api_keys = comma_split(request_auth[1])
-    if not api_keys:
-        return response.build_error("Unauthorized. API key required.", 401)
+    raw_api_key_list = request_auth[1].strip()
+    if not raw_api_key_list or len(raw_api_key_list) > 8192 or any(
+        char in raw_api_key_list for char in "\r\n\x00"
+    ):
+        return response.build_error("Unauthorized. Invalid API key header.", 401)
+
+    api_keys = comma_split(raw_api_key_list)
+    if (
+        not api_keys
+        or len(api_keys) > MAX_API_KEYS
+        or any(len(key) > 4096 for key in api_keys)
+    ):
+        return response.build_error(
+            f"Invalid API key list. Use between 1 and {MAX_API_KEYS} keys.", 400
+        )
 
     xuid = XUID(api_keys[0], xuid_secret)
 
@@ -53,7 +70,7 @@ def handle():
             "Concurrent use is not allowed. Please wait a moment.", 403
         )
 
-    user = UserSettings(storage, xuid)
+    user = None
     stream_cleanup_registered = False
     lock_released = False
 
@@ -65,9 +82,12 @@ def handle():
         try:
             storage.unlock(xuid)
         except Exception as e:  # noqa: BLE001 - cleanup must not mask response
-            xlog(user, f"Failed to unlock user storage: {type(e).__name__}")
+            xlog(user or xuid, f"Failed to unlock user storage: {type(e).__name__}")
 
     try:
+        # Keep storage reads inside the lock's try/finally scope: a Redis failure
+        # while constructing UserSettings must never strand a lock.
+        user = UserSettings(storage, xuid)
         # Cheap and easy rate limiting
         if (
             (seconds := user.last_seen())
@@ -157,4 +177,3 @@ def handle():
     finally:
         if not stream_cleanup_registered:
             unlock()
-

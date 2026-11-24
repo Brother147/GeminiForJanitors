@@ -5,6 +5,12 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import (
+    apply_openai_optional_params,
+    deepseek_reasoning_params,
+    extract_text_content,
+    message_payloads,
+)
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
@@ -27,13 +33,7 @@ def deepseek_generate_content(
     deepseek_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     for key, value in (settings or {}).items():
@@ -48,6 +48,10 @@ def deepseek_generate_content(
         elif key == "repetition_penalty":
             # Preserve JanitorAI's historical setting mapping.
             deepseek_request["presence_penalty"] = value
+
+    apply_openai_optional_params(deepseek_request, settings)
+    deepseek_request.pop("reasoning", None)
+    deepseek_request.update(deepseek_reasoning_params(settings))
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -96,12 +100,17 @@ def deepseek_generate_content(
         return JaiResult(502, "Unhandled exception from DeepSeek.")
 
     if not isinstance(deepseek_result, dict):
-        xlog(user, f"Invalid response shape from DeepSeek: {type(deepseek_result).__name__}")
+        xlog(
+            user,
+            f"Invalid response shape from DeepSeek: {type(deepseek_result).__name__}",
+        )
         track_stats("deepseek.rejected")
         return JaiResult(502, "Invalid response from DeepSeek.")
 
     try:
-        text = str(deepseek_result["choices"][0]["message"]["content"] or "")
+        text = extract_text_content(
+            deepseek_result["choices"][0]["message"].get("content")
+        )
     except (KeyError, IndexError, TypeError):
         text = ""
 

@@ -1,7 +1,7 @@
 import re
 from typing import Any, cast
 
-from ._globals import BANNER, BANNER_VERSION
+from ._globals import BANNER, BANNER_VERSION, ENABLE_TEST_PROXY
 from .commands import CommandError, CommandExit
 from .logging import xlog
 from .models import JaiMessage, JaiRequest, JaiResult, JaiResultMetadata
@@ -42,7 +42,6 @@ PROVIDER_FUNCS = {
     "groq": groq_generate_content,
     "nvidia": nvidia_generate_content,
     "openrouter": openrouter_generate_content,
-    "proxy": proxy_generate_content,
     "radeon": radeon_generate_content,
     "z_ai": z_ai_generate_content,
 }
@@ -81,7 +80,7 @@ def _handle_request(
             400,
             "The proxy couldn't recognize an API key.",
             extras=(
-                f"Your API key `{api_key}` didn't match any of the proxy's prefixes.\n"
+                "The supplied API key does not match a supported provider prefix.\n"
                 "You should specify the provider at the start of your API key. For example:\n"
                 "- If the key is for Cerebras, add `cerebras/` at the start of it.\n"
                 "- If the key is for DeepSeek, add `deepseek/` at the start of it.\n"
@@ -96,7 +95,15 @@ def _handle_request(
             metadata=JaiResultMetadata(api_key_valid=False),
         )
 
+    if provider_name == "proxy" and not ENABLE_TEST_PROXY:
+        return JaiResult(
+            403,
+            "The test-only proxy provider is disabled by the server administrator.",
+        )
+
     provider_func = PROVIDER_FUNCS.get(provider_name)
+    if not provider_func and provider_name == "proxy" and ENABLE_TEST_PROXY:
+        provider_func = proxy_generate_content
     if not provider_func:
         return JaiResult(
             500,
@@ -145,14 +152,14 @@ def parse_user_persona_names(
 
     user_name: str | None = None
     first_user_message = next(
-        (m for m in jai_req.messages if m.role == "user" and len(m.content) > 1),
+        (m for m in jai_req.messages if m.role == "user" and len(m.text_content()) > 1),
         None,
     )
     if (
         first_user_message is not None
-        and (user_name_index := first_user_message.content.find(": ")) > 0
+        and (user_name_index := first_user_message.text_content().find(": ")) > 0
     ):
-        user_name = first_user_message.content[:user_name_index].strip()
+        user_name = first_user_message.text_content()[:user_name_index].strip()
         xlog(user, f"Parsed user name: {user_name!r}")
     if not user_name:
         xlog(user, "User name not parsed")
@@ -160,7 +167,7 @@ def parse_user_persona_names(
 
     persona_name: str | None = None
     system_message = jai_req.messages[0]
-    if system_message.role == "system" and (
+    if system_message.role == "system" and isinstance(system_message.content, str) and (
         persona_match := PERSONA_REGEX.search(system_message.content)
     ):
         persona_name = str(persona_match.group(1)).strip()
@@ -238,14 +245,15 @@ def handle_chat_message(
         last_user_message = jai_req.messages[-2]
 
     fwp_prefill = "SYSTEM NOTE: Do not include the following words/phrases in your output under any circumstances: "
-    fwp_index = last_user_message.content.find(fwp_prefill)
+    last_user_text = last_user_message.text_content()
+    fwp_index = last_user_text.find(fwp_prefill)
     if fwp_index != -1:
         xlog(user, "User set forbidden words/phrases detected")
 
-    if last_user_message.content.startswith("Rewrite/Enhance this message: "):
+    if last_user_text.startswith("Rewrite/Enhance this message: "):
         xlog(user, "Handling enhance message ...")
         rtype = "enhance"
-    elif last_user_message.content.startswith("Create a brief, focused summary"):
+    elif last_user_text.startswith("Create a brief, focused summary"):
         xlog(user, "Handling auto summary ...")
         rtype = "summary"
     else:
@@ -305,6 +313,11 @@ def handle_chat_message(
     if jai_req.max_tokens:
         xlog(user, f"Adding max_tokens={jai_req.max_tokens} to model.")
         settings["max_tokens"] = jai_req.max_tokens
+
+    # Forward optional JanitorAI/OpenAI-compatible fields after the proxy has
+    # parsed its own command and generation settings. Provider adapters apply
+    # their own support allowlists before contacting upstream APIs.
+    settings.update(jai_req.extra_params)
 
     result = _handle_request(
         user.xuid,

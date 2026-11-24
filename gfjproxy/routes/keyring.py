@@ -1,9 +1,10 @@
 import json
 from hmac import digest
+from threading import BoundedSemaphore
 
 from flask import Blueprint, redirect, render_template, request
 
-from .._globals import PROXY_NAME, PROXY_URL
+from .._globals import KEYRING_MAX_REQUEST_BYTES, PROXY_NAME, PROXY_URL
 from ..logging import xlog, xlogtime
 from ..models import JaiMessage
 from ..providers.gemini_cli import (
@@ -17,6 +18,7 @@ from ..utils import base64url_decode, base64url_encode
 from ..xuid_secret import xuid_secret
 
 keyring = Blueprint("keyring", __name__)
+_KEYRING_SLOTS = BoundedSemaphore(2)
 
 
 @keyring.route("/keyring", methods=["GET"])
@@ -48,10 +50,28 @@ def index():
 
 @keyring.route("/keyring/api", methods=["POST"])
 def api():
+    # Acquire before reading the body: otherwise concurrent oversized requests
+    # could consume memory before the expensive credential-validation limit.
+    if not _KEYRING_SLOTS.acquire(blocking=False):
+        return {"error": "Keyring is busy. Please retry shortly."}, 429
+    try:
+        if (
+            request.content_length is not None
+            and request.content_length > KEYRING_MAX_REQUEST_BYTES
+        ):
+            return {"error": "Keyring request body is too large."}, 413
+        if len(request.get_data(cache=True)) > KEYRING_MAX_REQUEST_BYTES:
+            return {"error": "Keyring request body is too large."}, 413
+        return _process_api_request()
+    finally:
+        _KEYRING_SLOTS.release()
+
+
+def _process_api_request():
     assert storage is not None  # Make type checkers happy
 
     request_json = request.get_json(silent=True)
-    if not request_json:  # This should never happen.
+    if not isinstance(request_json, dict) or not request_json:
         return {"error": "Missing/invalid JSON in API call."}, 400
 
     type = request_json.get("credsType")
@@ -61,15 +81,16 @@ def api():
         }, 400
 
     model = request_json.get("model")
-    if not isinstance(model, str):
+    if not isinstance(model, str) or not model.strip() or len(model) > 256:
         return {"error": "Missing/invalid model in API call."}, 400
+    model = model.strip()
 
     try:
         credentials = request_json.get("creds")
         if not isinstance(credentials, dict):
             return {"error": "Missing/invalid credentials in API call."}, 400
         credentials = Credentials.parse(credentials)
-    except ValueError as e:
+    except (TypeError, ValueError) as e:
         return {"error": str(e)}, 400
 
     ref_time = xlogtime(None, "Keyring processing")
@@ -114,9 +135,10 @@ def api():
         .get("text")
     )
 
-    if not text.strip().upper().startswith("HELLO"):
+    if not isinstance(text, str) or not text.strip().upper().startswith("HELLO"):
         error_code = 502
-        error_message = f"Gemini CLI gave an unexpected response: {text!r}"
+        safe_text = repr(text)[:200] if text is not None else "<missing text>"
+        error_message = f"Gemini CLI gave an unexpected response: {safe_text}"
         xlog(None, f"Keyring processing failed: {error_code}: {error_message}")
         return {"error": error_message}, error_code
 
@@ -131,6 +153,8 @@ def api():
         jwt_payload = base64url_decode(jwt[1])
         jwt_payload_json = json.loads(jwt_payload)
         subject: str = jwt_payload_json["sub"]
+        if not isinstance(subject, str) or not subject or len(subject) > 256:
+            raise ValueError("Invalid subject")
         subject_digest = digest(xuid_secret, subject.encode("utf-8"), "sha256")
     except Exception as e:  # ruff: ignore[BLE001]
         xlog(None, f"Keyring processing exception during key generation: {e!r}")

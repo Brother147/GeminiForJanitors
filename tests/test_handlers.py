@@ -243,7 +243,7 @@ def test_proxy_test(mocker: MockerFixture, params: dict[str, Any]):
     user = UserSettings(storage, xuid)
 
     jai_req = JaiRequest(
-        api_key="AIzaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        api_key="google/test-api-key",
         models={"google": "gemini-2.5-flash"},
     )
 
@@ -325,7 +325,7 @@ def test_chat_message(mocker: MockerFixture, params: dict[str, Any]):
     user = UserSettings(LocalUserStorage(), XUID("john", "smith"))
 
     jai_req = JaiRequest(
-        api_key="AIzaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        api_key="google/test-api-key",
         models={"google": "gemini-2.5-flash"},
         messages=user_messages,
     )
@@ -366,7 +366,7 @@ def test_generation_settings_are_forwarded_without_commands(mocker: MockerFixtur
 
     user = UserSettings(LocalUserStorage(), XUID("settings", "user"))
     jai_req = JaiRequest(
-        api_key="AIzaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        api_key="google/test-api-key",
         models={"google": "gemini-2.5-flash"},
         messages=[
             JaiMessage.parse(
@@ -445,3 +445,19 @@ def test_handle_request_dispatches_radeon(mocker):
         [JaiMessage(role="user", content="hello")],
         None,
     )
+
+
+def test_generic_proxy_provider_is_disabled_by_default(monkeypatch):
+    import gfjproxy.handlers as handlers_module
+
+    monkeypatch.setattr(handlers_module, "ENABLE_TEST_PROXY", False)
+
+    result = _handle_request(
+        "test-user",
+        "proxy/secret@https://example.test/v1/chat/completions",
+        {"proxy": "test-model"},
+        [JaiMessage(content="hello")],
+    )
+
+    assert result.status == 403
+    assert "disabled" in result.error.lower()

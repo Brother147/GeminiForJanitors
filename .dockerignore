@@ -1,0 +1,19 @@
+# Keep the Docker build context limited to runtime inputs.
+.git/
+.github/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+colab/
+images/
+*.zip
+*.log
+.env
+.env.*
+.envrc
+*.pem
+*.key
+local_settings.py

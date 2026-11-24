@@ -5,6 +5,7 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
@@ -29,13 +30,7 @@ def z_ai_generate_content(
     z_ai_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     # Z.AI's current OpenAI-compatible API supports these sampling controls
@@ -55,6 +50,8 @@ def z_ai_generate_content(
         elif key == "repetition_penalty":
             # Preserve JanitorAI's historical setting mapping.
             z_ai_request["presence_penalty"] = value
+
+    apply_openai_optional_params(z_ai_request, settings)
 
     try:
         z_ai_result = openai_chat_completion(
@@ -113,7 +110,7 @@ def z_ai_generate_content(
         and isinstance(choices[0], dict)
         and isinstance(message := choices[0].get("message"), dict)
     ):
-        text = message.get("content", "")
+        text = extract_text_content(message.get("content"))
 
     if usage := z_ai_result.get("usage"):
         metadata.token_usage = JaiResultTokenUsage(
@@ -128,7 +125,7 @@ def z_ai_generate_content(
     if not text and isinstance(message, dict):
         # Some Z.AI responses place generated text in reasoning_content instead
         # of content. Keep it as a fallback so the response is not lost.
-        text = message.get("reasoning_content", "")
+        text = extract_text_content(message.get("reasoning_content"))
 
     if not text:
         # Rejection?

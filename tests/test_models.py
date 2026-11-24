@@ -78,7 +78,7 @@ def test_parse_radeon_model_preserves_exact_case():
     "payload",
     [
         {"messages": {}, "model": "gemini-2.5-flash"},
-        {"messages": [{"role": "user", "content": []}], "model": "gemini-2.5-flash"},
+        {"messages": [{"role": "user", "content": 123}], "model": "gemini-2.5-flash"},
         {"messages": [{"role": "user", "content": "hello"}], "model": []},
     ],
 )
@@ -102,3 +102,21 @@ def test_jai_request_rejects_malformed_payload_types(payload):
 def test_jai_request_rejects_invalid_generation_setting_types(field, value):
     with pytest.raises(TypeError):
         JaiRequest.parse({"model": "gemini-2.5-flash", field: value})
+
+
+@pytest.mark.parametrize(
+    "value", [float("nan"), float("inf"), -float("inf"), 1_000_001]
+)
+def test_jai_request_rejects_non_finite_or_excessive_generation_settings(value):
+    with pytest.raises(ValueError):
+        JaiRequest.parse({"temperature": value})
+
+
+def test_jai_request_rejects_negative_max_tokens():
+    with pytest.raises(ValueError):
+        JaiRequest.parse({"max_tokens": -1})
+
+
+def test_jai_request_rejects_too_many_messages():
+    with pytest.raises(ValueError):
+        JaiRequest.parse({"messages": [{}] * 8193})

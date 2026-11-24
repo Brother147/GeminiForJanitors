@@ -248,12 +248,24 @@ def _extract_openai_content(choice: dict[str, Any]) -> str | None:
         content = delta.get("content")
         if isinstance(content, str):
             return content
+        if isinstance(content, list):
+            return "".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, dict) and isinstance(part.get("text"), str)
+            )
 
     message = choice.get("message")
     if isinstance(message, dict):
         content = message.get("content")
         if isinstance(content, str):
             return content
+        if isinstance(content, list):
+            return "".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, dict) and isinstance(part.get("text"), str)
+            )
 
     text = choice.get("text")
     return text if isinstance(text, str) else None

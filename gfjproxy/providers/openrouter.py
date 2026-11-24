@@ -5,6 +5,11 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT, PROXY_NAME, PROXY_URL
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import (
+    apply_openai_optional_params,
+    extract_text_content,
+    message_payloads,
+)
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
@@ -27,13 +32,7 @@ def openrouter_generate_content(
     openrouter_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     for key, value in (settings or {}).items():
@@ -50,6 +49,8 @@ def openrouter_generate_content(
         elif key == "repetition_penalty":
             # Preserve JanitorAI's historical setting mapping.
             openrouter_request["presence_penalty"] = value
+
+    apply_openai_optional_params(openrouter_request, settings, provider="openrouter")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -104,7 +105,11 @@ def openrouter_generate_content(
         return JaiResult(502, "Unhandled exception from OpenRouter.")
 
     if not isinstance(openrouter_result, dict):
-        xlog(user, f"Invalid response shape from OpenRouter: {type(openrouter_result).__name__}")
+        xlog(
+            user,
+            "Invalid response shape from OpenRouter: "
+            f"{type(openrouter_result).__name__}",
+        )
         track_stats("openrouter.failed.anomalous")
         return JaiResult(502, "Invalid response from OpenRouter.")
 
@@ -119,7 +124,9 @@ def openrouter_generate_content(
         return JaiResult(502, message)
 
     try:
-        text = str(openrouter_result["choices"][0]["message"]["content"] or "")
+        text = extract_text_content(
+            openrouter_result["choices"][0]["message"].get("content")
+        )
     except (KeyError, IndexError, TypeError):
         text = ""
 

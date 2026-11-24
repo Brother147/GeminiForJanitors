@@ -6,10 +6,35 @@
 
 <hr />
 
+- [JanitorAI compatibility and proxy URL](#janitorai-compatibility-and-proxy-url)
+- [Security and resource limits](#security-and-resource-limits)
 - [Running locally](#running-locally)
 - [Deploying on Railway](#deploying-on-railway)
 - [Deploying on Render](#deploying-on-render)
 - [Adaptive Cooldown](#adaptive-cooldown)
+
+## JanitorAI compatibility and proxy URL
+
+JanitorAI redesigned its API Settings page in July 2026. The labels and layout changed, but this project continues to accept the OpenAI-compatible chat-completions request format used by JanitorAI proxy configurations. In the current interface, choose **Proxy** under the provider settings, add a configuration, and enter this server's URL. The server accepts both legacy paths (`/chat/completions`) and the standard versioned path (`/v1/chat/completions`), so use the exact endpoint path shown by the client or proxy setup instructions.
+
+Keep the API key and model ID exactly as supplied by your model provider. JanitorAI's **Instructions** section is separate from the proxy transport; custom prompts, prefills, and forbidden words are sent as part of the chat history, not as a different API protocol. Save the configuration and reload JanitorAI before testing it. Use third-party proxies only with bots whose creators permit proxy use, and remember that chat history and prompts are sent to the selected external model provider.
+
+### Thinking / reasoning menu (November 2026)
+
+JanitorAI now exposes a **Thinking** control for proxy configurations. In the proxy's JanitorAI settings, enable the levels the selected upstream provider/model actually supports: **Off, Minimal, Low, Medium, High, Extra high, Max**. Leaving all levels disabled hides the Thinking control in chat. These checkboxes are configured in JanitorAI itself; the proxy cannot change the saved JanitorAI UI configuration.
+
+When JanitorAI sends a level, this proxy accepts both the OpenAI-compatible `reasoning_effort` form and OpenRouter's `reasoning: {"effort": "..."}` form. The proxy understands either request shape and translates it for the internally selected provider, so both JanitorAI request-format modes can be received. OpenRouter receives its native effort values (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`). Direct DeepSeek requests are translated to DeepSeek's documented `thinking` toggle and supported effort values. Gemini 2.5 uses a model-appropriate thinking budget; Gemini 3+ uses only levels supported by the specific model. Gemini 3+ cannot fully disable thinking, and Gemini 2.5 Pro also cannot disable it, so an **Off** selection is clamped to the provider's lowest available setting for those models.
+
+The request parser retains unknown top-level fields and complete message objects, including tool metadata, reasoning history, and multimodal content arrays. Built-in provider adapters forward recognized options and avoid blindly sending unknown keys that could make an upstream reject the request; the opt-in generic test relay forwards additional fields to its explicitly allowlisted target. This means the proxy can receive newer Janitor fields without rejecting them, while a particular upstream model still determines which options it can execute.
+
+## Security and resource limits
+
+- Request bodies are limited to 32 MiB by default (`GFJPROXY_MAX_REQUEST_BYTES`). Increase this only when your trusted use case genuinely needs larger histories.
+- Browser CORS is limited to `https://janitorai.com` and `https://www.janitorai.com` by default. Add trusted origins with the comma-separated `GFJPROXY_CORS_ORIGINS` variable; setting it to `*` deliberately reopens cross-origin access.
+- Production requires a persistent XUID secret of at least 32 UTF-8 bytes. Keep `GFJPROXY_XUID_SECRET` private and stable across deployments.
+- The generic `proxy/` provider is disabled by default because it can make outbound requests. To enable it for controlled testing, set `GFJPROXY_ENABLE_TEST_PROXY=1` and list exact trusted HTTPS hostnames in `GFJPROXY_TEST_PROXY_ALLOWED_HOSTS` (comma-separated). Private, loopback, local, and reserved targets are rejected. Do not enable this feature on a public instance unless you control every allowed host.
+- Gemini CLI credential submissions are capped at 128 KiB (`GFJPROXY_KEYRING_MAX_REQUEST_BYTES`) and limited to two concurrent validation operations per worker. Credential responses are marked `Cache-Control: no-store`.
+- API-key rotation lists accept up to 10 keys by default (`GFJPROXY_MAX_API_KEYS`, configurable up to 50).
 
 ## Running locally
 

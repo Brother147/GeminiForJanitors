@@ -5,6 +5,7 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
@@ -28,13 +29,7 @@ def groq_generate_content(
     groq_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     for key, value in (settings or {}).items():
@@ -55,6 +50,8 @@ def groq_generate_content(
             # translate it to presence_penalty, which also causes unsupported
             # behavior on Groq models.
             continue
+
+    apply_openai_optional_params(groq_request, settings)
 
     headers = {
         "Authorization": f"Bearer {api_key.removeprefix('groq/').strip()}",
@@ -116,7 +113,7 @@ def groq_generate_content(
         return JaiResult(502, "Invalid response from Groq.")
 
     try:
-        text = str(groq_result["choices"][0]["message"]["content"] or "")
+        text = extract_text_content(groq_result["choices"][0]["message"].get("content"))
     except (KeyError, IndexError, TypeError):
         text = ""
 

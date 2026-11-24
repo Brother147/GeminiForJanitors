@@ -1,5 +1,7 @@
 import pytest
 
+import gfjproxy.providers.proxy as proxy_module
+
 from gfjproxy.models import JaiMessage
 from gfjproxy.providers.cerebras import cerebras_generate_content
 from gfjproxy.providers.deepseek import deepseek_generate_content
@@ -48,7 +50,17 @@ def test_openai_compatible_providers_return_a_lazy_stream(
     assert request["stream"] is True
 
 
-def test_proxy_provider_returns_a_lazy_stream(mocker):
+def test_proxy_provider_returns_a_lazy_stream(mocker, monkeypatch):
+    monkeypatch.setattr(
+        proxy_module, "TEST_PROXY_ALLOWED_HOSTS", frozenset({"example.test"})
+    )
+    monkeypatch.setattr(
+        proxy_module,
+        "getaddrinfo",
+        lambda host, port, type: [
+            (None, None, None, None, ("8.8.8.8", port))
+        ],
+    )
     marker = iter(["answer"])
     stream_call = mocker.patch(
         "gfjproxy.providers.proxy.openai_chat_completion",
@@ -107,3 +119,45 @@ def test_gemini_cli_provider_returns_a_lazy_stream(mocker):
     assert result.success
     assert result.value["_stream"] is marker
     assert stream_call.call_args.kwargs["request"]["request"]["contents"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.test/v1/chat/completions",
+        "https://user:pass@example.test/v1/chat/completions",
+        "https://unlisted.example/v1/chat/completions",
+        "https://example.test:8443/v1/chat/completions",
+        "https://example.test/v1/chat/completions#fragment",
+    ],
+)
+def test_test_proxy_rejects_untrusted_or_unsafe_urls(monkeypatch, url):
+    monkeypatch.setattr(
+        proxy_module, "TEST_PROXY_ALLOWED_HOSTS", frozenset({"example.test"})
+    )
+    monkeypatch.setattr(
+        proxy_module,
+        "getaddrinfo",
+        lambda host, port, type: [
+            (None, None, None, None, ("8.8.8.8", port))
+        ],
+    )
+
+    assert proxy_module._validate_target_url(url) is not None
+
+
+def test_test_proxy_rejects_private_dns_results(monkeypatch):
+    monkeypatch.setattr(
+        proxy_module, "TEST_PROXY_ALLOWED_HOSTS", frozenset({"example.test"})
+    )
+    monkeypatch.setattr(
+        proxy_module,
+        "getaddrinfo",
+        lambda host, port, type: [
+            (None, None, None, None, ("127.0.0.1", port))
+        ],
+    )
+
+    assert proxy_module._validate_target_url(
+        "https://example.test/v1/chat/completions"
+    ) is not None

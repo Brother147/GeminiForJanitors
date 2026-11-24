@@ -5,6 +5,7 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
@@ -27,13 +28,7 @@ def cerebras_generate_content(
     cerebras_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     # As of April 6, 2026, Cerebras does not support top_k
@@ -53,6 +48,8 @@ def cerebras_generate_content(
         elif key == "repetition_penalty":
             # Preserve JanitorAI's historical setting mapping.
             cerebras_request["presence_penalty"] = value
+
+    apply_openai_optional_params(cerebras_request, settings)
 
     try:
         cerebras_result = openai_chat_completion(
@@ -101,7 +98,7 @@ def cerebras_generate_content(
         return JaiResult(502, "Invalid response from Cerebras.")
 
     try:
-        text = str(cerebras_result["choices"][0]["message"]["content"] or "")
+        text = extract_text_content(cerebras_result["choices"][0]["message"].get("content"))
     except (KeyError, IndexError, TypeError):
         text = ""
 

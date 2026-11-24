@@ -5,6 +5,7 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
@@ -45,13 +46,7 @@ def nvidia_generate_content(
     nvidia_request = {
         "model": model,
         "stream": stream,
-        "messages": [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in messages
-        ],
+        "messages": message_payloads(messages),
     }
 
     if model.lower() in {"z-ai/glm-5.3", "z-ai/glm-5.3-flash"}:
@@ -75,6 +70,8 @@ def nvidia_generate_content(
         elif key == "repetition_penalty":
             # Preserve JanitorAI's historical setting mapping.
             nvidia_request["presence_penalty"] = value
+
+    apply_openai_optional_params(nvidia_request, settings)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -137,7 +134,7 @@ def nvidia_generate_content(
         return JaiResult(502, "Invalid response from Nvidia NIM.")
 
     try:
-        text = str(nvidia_result["choices"][0]["message"]["content"] or "")
+        text = extract_text_content(nvidia_result["choices"][0]["message"].get("content"))
     except (KeyError, IndexError, TypeError):
         text = ""
 

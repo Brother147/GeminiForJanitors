@@ -19,6 +19,29 @@ def _fallback_env(*names) -> str | None:
     return None
 
 
+def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = _env.get(name)
+    try:
+        value = default if raw is None or not raw.strip() else int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer") from exc
+    if not minimum <= value <= maximum:
+        raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = _env.get(name)
+    if value is None:
+        return default
+    value = value.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off", ""}:
+        return False
+    raise RuntimeError(f"{name} must be one of: 1/0, true/false, yes/no, on/off")
+
+
 def _get_proxy_branch() -> str:
     branch = (
         _fallback_env(
@@ -132,6 +155,30 @@ REDIS_URL = _env.get("GFJPROXY_REDIS_URL")
 
 XUID_SECRET = _env.get("GFJPROXY_XUID_SECRET")
 
+# The generic proxy provider is a test-only feature because it can make outbound
+# requests to an administrator-selected endpoint. Keep it disabled by default.
+ENABLE_TEST_PROXY = _env_bool("GFJPROXY_ENABLE_TEST_PROXY", False)
+TEST_PROXY_ALLOWED_HOSTS = frozenset(
+    host.strip().lower().rstrip(".")
+    for host in _env.get("GFJPROXY_TEST_PROXY_ALLOWED_HOSTS", "").split(",")
+    if host.strip()
+)
+
+# Protect JSON parsing and upstream providers from unexpectedly large payloads.
+MAX_REQUEST_BYTES = _env_int(
+    "GFJPROXY_MAX_REQUEST_BYTES",
+    32 * 1024 * 1024,
+    minimum=1024,
+    maximum=128 * 1024 * 1024,
+)
+KEYRING_MAX_REQUEST_BYTES = _env_int(
+    "GFJPROXY_KEYRING_MAX_REQUEST_BYTES",
+    128 * 1024,
+    minimum=1024,
+    maximum=1024 * 1024,
+)
+MAX_API_KEYS = _env_int("GFJPROXY_MAX_API_KEYS", 10, minimum=1, maximum=50)
+
 STATS_DURATION = int(_env.get("GFJPROXY_STATS_DURATION", "24"))
 
 ################################################################################
@@ -147,7 +194,7 @@ PROCESS_TIMEOUT: int = max(
 
 ################################################################################
 
-BANNER_VERSION = 36
+BANNER_VERSION = 37
 
 BANNER = rf"""***
 # **{PROXY_NAME}** ({PROXY_VERSION} {PROXY_BRANCH})
@@ -200,6 +247,12 @@ Pull requests are welcome at `https://github.com/vu5eruz/GeminiForJanitors` for 
 ● Generation settings supplied by JanitorAI are now forwarded directly when present.
 
 ● Added `//roll` as a short alias for the existing dice command.
+
+## November 24, 2026
+
+● Added support for the versioned OpenAI-compatible `/v1/chat/completions` route.
+
+● Hardened request validation, keyring limits, and the optional test-proxy host allowlist.
 
 """
 
