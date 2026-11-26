@@ -164,16 +164,18 @@ def test_proxy_unlocks_when_user_settings_initialization_fails(monkeypatch):
     monkeypatch.setattr(proxy_module, "UserSettings", broken_user_settings)
     monkeypatch.setattr(proxy_module, "xuid_secret", "test-secret")
 
-    with app.test_request_context(
-        "/chat/completions",
-        method="POST",
-        json={
-            "messages": [{"content": "hello", "role": "user"}],
-            "model": "gemini-2.5-flash",
-        },
-        headers={"Authorization": "Bearer test-key"},
+    with (
+        app.test_request_context(
+            "/chat/completions",
+            method="POST",
+            json={
+                "messages": [{"content": "hello", "role": "user"}],
+                "model": "gemini-2.5-flash",
+            },
+            headers={"Authorization": "Bearer test-key"},
+        ),
+        pytest.raises(RuntimeError, match="storage unavailable"),
     ):
-        with pytest.raises(RuntimeError, match="storage unavailable"):
-            proxy_module.handle()
+        proxy_module.handle()
 
     assert storage.unlock_calls == 1

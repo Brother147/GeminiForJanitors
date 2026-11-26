@@ -5,11 +5,15 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
-from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..utils import safe_response_json
 from ..xuiduser import XUID
+from .openai_compat import (
+    apply_openai_optional_params,
+    extract_text_content,
+    message_payloads,
+)
 
 
 def _simplify_error_message(message: str) -> str:

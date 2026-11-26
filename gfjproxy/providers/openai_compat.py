@@ -321,9 +321,11 @@ def gemini_thinking_config(
             supported = ["LOW", "MEDIUM", "HIGH"]
             if "neon" in model_id or "hydrogen" in model_id:
                 supported.append("XHIGH")
-        elif "gemini-3.8" in model_id or "gemini-3.7" in model_id:
-            supported = ["LOW", "MEDIUM", "HIGH"]
-        elif "gemini-3.1-pro" in model_id:
+        elif (
+            "gemini-3.8" in model_id
+            or "gemini-3.7" in model_id
+            or "gemini-3.1-pro" in model_id
+        ):
             supported = ["LOW", "MEDIUM", "HIGH"]
         elif any(
             marker in model_id

@@ -14,9 +14,9 @@ from .._globals import (
 from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult
-from .openai_compat import apply_openai_optional_params, message_payloads
 from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
+from .openai_compat import apply_openai_optional_params, message_payloads
 
 
 def _validate_target_url(url: str) -> str | None:

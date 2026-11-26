@@ -5,10 +5,14 @@ import httpx2
 from .._globals import PROCESS_TIMEOUT
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
-from .openai_compat import apply_openai_optional_params, extract_text_content, message_payloads
 from ..statistics import track_stats
 from ..streaming import openai_chat_completion
 from ..xuiduser import XUID
+from .openai_compat import (
+    apply_openai_optional_params,
+    extract_text_content,
+    message_payloads,
+)
 
 RADEON_CHAT_COMPLETIONS_URL = (
     "https://developer.amd.com.cn/radeon/api/v1/chat/completions"

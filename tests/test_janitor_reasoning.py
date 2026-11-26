@@ -4,8 +4,8 @@ from gfjproxy.providers.openai_compat import (
     deepseek_reasoning_params,
     gemini_parts,
     gemini_thinking_config,
-    message_payloads,
     merge_extra_body,
+    message_payloads,
 )
 
 

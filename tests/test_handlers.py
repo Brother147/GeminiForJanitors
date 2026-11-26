@@ -349,7 +349,7 @@ def test_chat_message(mocker: MockerFixture, params: dict[str, Any]):
         expected_status,
     )
 
-    _, kwargs = mock_post.call_args
+    _, _kwargs = mock_post.call_args
 
 
 
@@ -382,7 +382,7 @@ def test_generation_settings_are_forwarded_without_commands(mocker: MockerFixtur
     response = handle_chat_message(user, jai_req, ResponseHelper(wrap_errors=False))
 
     assert response.status == 200
-    _, kwargs = mock_post.call_args
+    _, _kwargs = mock_post.call_args
     generation_config = kwargs["json"]["generationConfig"]
     assert generation_config["temperature"] == pytest.approx(0.8)
     assert generation_config["topP"] == pytest.approx(0.9)

@@ -11,16 +11,16 @@ from .._globals import PROCESS_TIMEOUT, PROXY_URL
 from ..http_client import http_client
 from ..logging import xlog, xlogtime
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
-from .openai_compat import (
-    gemini_parts,
-    gemini_thinking_config,
-    merge_extra_body,
-)
 from ..statistics import track_stats
 from ..storage import storage
 from ..streaming import gemini_sse_completion
 from ..utils import base64url_decode, safe_response_json, utcfromtimestamp, utcnow
 from ..xuiduser import XUID
+from .openai_compat import (
+    gemini_parts,
+    gemini_thinking_config,
+    merge_extra_body,
+)
 
 # https://github.com/google-gemini/gemini-cli/blob/17b37144a96da13bf7a0917411bc1d34142609d7/packages/core/src/code_assist/oauth2.ts#L72
 CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"

@@ -232,7 +232,7 @@ def handle_chat_message(
     if not jai_req.messages:
         return response.add_error("Invalid request: messages cannot be empty.", 400)
 
-    user_name, persona_name = parse_user_persona_names(user, jai_req)
+    _user_name, _persona_name = parse_user_persona_names(user, jai_req)
 
     last_user_message = jai_req.messages[-1]
     if last_user_message.role == "assistant":

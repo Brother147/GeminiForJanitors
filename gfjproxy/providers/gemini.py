@@ -6,15 +6,15 @@ from .._globals import PROCESS_TIMEOUT
 from ..http_client import http_client
 from ..logging import xlog
 from ..models import JaiMessage, JaiResult, JaiResultMetadata, JaiResultTokenUsage
+from ..statistics import track_stats
+from ..streaming import gemini_sse_completion
+from ..utils import safe_response_json
+from ..xuiduser import XUID
 from .openai_compat import (
     gemini_parts,
     gemini_thinking_config,
     merge_extra_body,
 )
-from ..statistics import track_stats
-from ..streaming import gemini_sse_completion
-from ..utils import safe_response_json
-from ..xuiduser import XUID
 
 ################################################################################
 

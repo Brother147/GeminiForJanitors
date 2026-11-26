@@ -1,7 +1,6 @@
 import pytest
 
 import gfjproxy.providers.proxy as proxy_module
-
 from gfjproxy.models import JaiMessage
 from gfjproxy.providers.cerebras import cerebras_generate_content
 from gfjproxy.providers.deepseek import deepseek_generate_content
